@@ -31,8 +31,10 @@ jobs:
               - 'app.py'
               - 'requirements.txt'
               - 'Dockerfile'
+              - '.github/workflows/deploy.yaml'
             frontend:
               - 'frontend/**'
+              - '.github/workflows/deploy.yaml'
 
   build-backend:
     name: Build & push backend
