@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './App.css'
 
-const APP_VERSION = 'v1.0.0'
-
 function App() {
   const [dogs, setDogs] = useState([])
   const [breed, setBreed] = useState('')
@@ -12,6 +10,7 @@ function App() {
   const [preview, setPreview] = useState(null)
   const [loading, setLoading] = useState(false)
   const [health, setHealth] = useState(null)
+  const [version, setVersion] = useState('')
   const navigate = useNavigate()
 
   const fetchDogs = () => {
@@ -27,6 +26,10 @@ function App() {
       .then(res => res.json())
       .then(data => setHealth(data.status))
       .catch(() => setHealth('error'))
+    fetch('/version.json')
+      .then(res => res.json())
+      .then(data => setVersion(data.version))
+      .catch(() => setVersion('unknown'))
   }, [])
 
   const handlePhotoChange = (e) => {
@@ -69,7 +72,7 @@ function App() {
           <div className="logo-row">
             <img src="/datadog.svg" alt="Datadog" className="dd-logo" />
             <h1>Dog Breeds</h1>
-            <span className="version-tag">{APP_VERSION}</span>
+            <span className="version-tag">{version}</span>
           </div>
           <p className="subtitle">Discover and share your favorite breeds</p>
         </div>
@@ -146,7 +149,7 @@ function App() {
       <footer>
         <img src="/datadog.svg" alt="Datadog" className="dd-footer-logo" />
         <span>Powered by Datadog</span>
-        <span className="footer-version">{APP_VERSION}</span>
+        <span className="footer-version">{version}</span>
       </footer>
     </div>
   )

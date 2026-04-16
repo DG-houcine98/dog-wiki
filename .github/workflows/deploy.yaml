@@ -80,6 +80,14 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Stamp version
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [[ ! "$VERSION" =~ ^v ]]; then
+            VERSION="build-${GITHUB_SHA::7}"
+          fi
+          echo "{\"version\":\"$VERSION\"}" > frontend/public/version.json
+
       - name: Build and push
         run: |
           docker build --platform linux/amd64 -t $ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }} -t $ECR_REGISTRY/$FRONTEND_IMAGE:latest frontend/
