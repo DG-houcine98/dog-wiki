@@ -124,6 +124,69 @@ def get_photo(dog_id):
     )
 
 
+@app.route('/dogs/<dog_id>', methods=['PUT'])
+def update_dog(dog_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT id, photo_key FROM dogs WHERE id = %s', (dog_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify(error='Not found'), 404
+
+    breed = request.form.get('breed')
+    description = request.form.get('description')
+    photo = request.files.get('photo')
+
+    if not breed:
+        cur.close()
+        conn.close()
+        return jsonify(error='breed is required'), 400
+
+    photo_key = row[1]
+    if photo:
+        ext = photo.filename.rsplit('.', 1)[-1] if '.' in photo.filename else 'jpg'
+        photo_key = f'dogs/{dog_id}.{ext}'
+        s3.upload_fileobj(
+            photo, S3_BUCKET, photo_key,
+            ExtraArgs={'ContentType': photo.content_type},
+        )
+
+    cur.execute(
+        'UPDATE dogs SET breed = %s, description = %s, photo_key = %s WHERE id = %s',
+        (breed, description, photo_key, dog_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify(id=dog_id, breed=breed, description=description)
+
+
+@app.route('/dogs/<dog_id>', methods=['DELETE'])
+def delete_dog(dog_id):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('SELECT photo_key FROM dogs WHERE id = %s', (dog_id,))
+    row = cur.fetchone()
+    if not row:
+        cur.close()
+        conn.close()
+        return jsonify(error='Not found'), 404
+
+    if row[0]:
+        try:
+            s3.delete_object(Bucket=S3_BUCKET, Key=row[0])
+        except Exception:
+            pass
+
+    cur.execute('DELETE FROM dogs WHERE id = %s', (dog_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify(ok=True)
+
+
 @app.route('/dogs', methods=['POST'])
 def create_dog():
     breed = request.form.get('breed')

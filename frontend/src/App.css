@@ -244,11 +244,16 @@ header {
   box-shadow: 0 2px 8px rgba(99, 44, 166, 0.06);
   border: 1px solid var(--dd-purple-border);
   transition: box-shadow 0.2s, transform 0.2s;
+  cursor: pointer;
 }
 
 .card:hover {
   box-shadow: 0 10px 30px rgba(99, 44, 166, 0.12);
   transform: translateY(-3px);
+}
+
+.card:hover .edit-hint {
+  opacity: 1;
 }
 
 .card-img {
@@ -297,6 +302,76 @@ header {
 .card-body small {
   color: #9ca3af;
   font-size: 0.8rem;
+}
+
+/* Card footer */
+.card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.edit-hint {
+  font-size: 0.75rem;
+  color: var(--dd-purple-light);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+/* Version tag */
+.version-tag {
+  background: var(--dd-purple);
+  color: #fff;
+  font-size: 0.7rem;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  align-self: center;
+}
+
+.footer-version {
+  color: var(--dd-purple-border);
+  font-size: 0.75rem;
+}
+
+/* Back link */
+.back-link {
+  color: var(--dd-purple);
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* Edit actions */
+.edit-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-delete {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-delete:hover {
+  background: #fef2f2;
+}
+
+.btn-delete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Footer */

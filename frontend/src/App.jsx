@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import './App.css'
+
+const APP_VERSION = 'v1.0.0'
 
 function App() {
   const [dogs, setDogs] = useState([])
@@ -9,6 +12,7 @@ function App() {
   const [preview, setPreview] = useState(null)
   const [loading, setLoading] = useState(false)
   const [health, setHealth] = useState(null)
+  const navigate = useNavigate()
 
   const fetchDogs = () => {
     fetch('/api/dogs')
@@ -65,8 +69,9 @@ function App() {
           <div className="logo-row">
             <img src="/datadog.svg" alt="Datadog" className="dd-logo" />
             <h1>Dog Breeds</h1>
+            <span className="version-tag">{APP_VERSION}</span>
           </div>
-          <p className="subtitle">Discover and share your favorite breeds - v2.0</p>
+          <p className="subtitle">Discover and share your favorite breeds</p>
         </div>
         <span className={`badge ${health === 'ok' ? 'badge-ok' : 'badge-error'}`}>
           {health === 'ok' ? 'API Connected' : 'API Offline'}
@@ -117,7 +122,7 @@ function App() {
         {dogs.length === 0 && <p className="empty">No breeds yet. Add one above!</p>}
         <div className="grid">
           {dogs.map(dog => (
-            <div key={dog.id} className="card">
+            <div key={dog.id} className="card" onClick={() => navigate(`/edit/${dog.id}`)}>
               <div className="card-img">
                 {dog.photo_url ? (
                   <img src={`/api${dog.photo_url}`} alt={dog.breed} />
@@ -128,7 +133,10 @@ function App() {
               <div className="card-body">
                 <h3>{dog.breed}</h3>
                 <p>{dog.description}</p>
-                <small>{new Date(dog.created_at).toLocaleDateString()}</small>
+                <div className="card-footer">
+                  <small>{new Date(dog.created_at).toLocaleDateString()}</small>
+                  <span className="edit-hint">Click to edit</span>
+                </div>
               </div>
             </div>
           ))}
@@ -138,6 +146,7 @@ function App() {
       <footer>
         <img src="/datadog.svg" alt="Datadog" className="dd-footer-logo" />
         <span>Powered by Datadog</span>
+        <span className="footer-version">{APP_VERSION}</span>
       </footer>
     </div>
   )

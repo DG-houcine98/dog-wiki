@@ -1,0 +1,28 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## What's Changed
+            See the automatically generated release notes below.
+
+            ## Docker Images
+            - Backend: `369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-flask:${{ github.ref_name }}`
+            - Frontend: `369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-app-frontend:${{ github.ref_name }}`
