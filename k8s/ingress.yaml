@@ -7,7 +7,7 @@ metadata:
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
-    alb.ingress.kubernetes.io/inbound-cidrs: 176.130.134.25/32, 91.197.137.154/32
+    alb.ingress.kubernetes.io/inbound-cidrs: 176.130.134.25/32, 91.197.137.154/32, 91.197.136.82/32
 spec:
   rules:
     - http:

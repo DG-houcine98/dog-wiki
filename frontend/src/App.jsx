@@ -66,7 +66,7 @@ function App() {
             <img src="/datadog.svg" alt="Datadog" className="dd-logo" />
             <h1>Dog Breeds</h1>
           </div>
-          <p className="subtitle">Discover and share your favorite breeds</p>
+          <p className="subtitle">Discover and share your favorite breeds - v2.0</p>
         </div>
         <span className={`badge ${health === 'ok' ? 'badge-ok' : 'badge-error'}`}>
           {health === 'ok' ? 'API Connected' : 'API Offline'}
