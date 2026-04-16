@@ -3,6 +3,8 @@ name: Build and Deploy
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 env:
@@ -117,3 +119,22 @@ jobs:
           kubectl set image deployment/lahoucine-app-frontend \
             lahoucine-app-frontend=$ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }}
           kubectl rollout status deployment/lahoucine-app-frontend --timeout=120s
+
+  release:
+    name: Create GitHub Release
+    needs: deploy
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          body: |
+            ## Docker Images
+            - Backend: `369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-flask:${{ github.sha }}`
+            - Frontend: `369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-app-frontend:${{ github.sha }}`
