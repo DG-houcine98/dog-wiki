@@ -121,7 +121,7 @@ jobs:
 
       - name: Deploy manifests to dev
         run: |
-          kubectl apply -f k8s/ -n dev --ignore-not-found
+          find k8s/ -maxdepth 1 -name '*.yaml' -exec kubectl apply -f {} -n dev \;
           kubectl apply -f k8s/dev/ -n dev
 
       - name: Deploy backend
@@ -163,7 +163,7 @@ jobs:
 
       - name: Deploy manifests to prod
         run: |
-          kubectl apply -f k8s/ -n prod
+          find k8s/ -maxdepth 1 -name '*.yaml' -exec kubectl apply -f {} -n prod \;
 
       - name: Deploy backend
         if: needs.build-backend.result == 'success'
