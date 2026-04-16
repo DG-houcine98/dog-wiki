@@ -121,7 +121,8 @@ jobs:
 
       - name: Deploy manifests to dev
         run: |
-          kubectl apply -f k8s/ -n dev
+          kubectl apply -f k8s/ -n dev --ignore-not-found
+          kubectl apply -f k8s/dev/ -n dev
 
       - name: Deploy backend
         if: needs.build-backend.result == 'success'
