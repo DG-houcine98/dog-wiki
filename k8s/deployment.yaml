@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lahoucine-app
+  labels:
+    app: lahoucine-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: lahoucine-app
+  template:
+    metadata:
+      labels:
+        app: lahoucine-app
+    spec:
+      containers:
+        - name: lahoucine-app
+          image: 369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-flask:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: S3_BUCKET
+              value: lahoucine-cluster-dog-photos-369042512949
+            - name: AWS_REGION
+              value: eu-west-2
+            - name: DB_HOST
+              value: postgres
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_DB
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi

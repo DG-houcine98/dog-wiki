@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lahoucine-app
+  labels:
+    app: lahoucine-app
+spec:
+  type: ClusterIP
+  selector:
+    app: lahoucine-app
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
