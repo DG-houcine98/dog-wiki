@@ -1,0 +1,119 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: eu-west-2
+  ECR_REGISTRY: 369042512949.dkr.ecr.eu-west-2.amazonaws.com
+  EKS_CLUSTER: lahoucine-cluster
+  BACKEND_IMAGE: lahoucine-flask
+  FRONTEND_IMAGE: lahoucine-app-frontend
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'app.py'
+              - 'requirements.txt'
+              - 'Dockerfile'
+            frontend:
+              - 'frontend/**'
+
+  build-backend:
+    name: Build & push backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        run: |
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }} -t $ECR_REGISTRY/$BACKEND_IMAGE:latest .
+          docker push $ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }}
+          docker push $ECR_REGISTRY/$BACKEND_IMAGE:latest
+
+  build-frontend:
+    name: Build & push frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push
+        run: |
+          docker build --platform linux/amd64 -t $ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }} -t $ECR_REGISTRY/$FRONTEND_IMAGE:latest frontend/
+          docker push $ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }}
+          docker push $ECR_REGISTRY/$FRONTEND_IMAGE:latest
+
+  deploy:
+    name: Deploy to EKS
+    needs: [build-backend, build-frontend]
+    if: always() && (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER --region $AWS_REGION
+
+      - name: Deploy backend
+        if: needs.build-backend.result == 'success'
+        run: |
+          kubectl set image deployment/lahoucine-app \
+            lahoucine-app=$ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }}
+          kubectl rollout status deployment/lahoucine-app --timeout=120s
+
+      - name: Deploy frontend
+        if: needs.build-frontend.result == 'success'
+        run: |
+          kubectl set image deployment/lahoucine-app-frontend \
+            lahoucine-app-frontend=$ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }}
+          kubectl rollout status deployment/lahoucine-app-frontend --timeout=120s
