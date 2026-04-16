@@ -37,7 +37,7 @@ jobs:
   build-backend:
     name: Build & push backend
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.backend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -63,7 +63,7 @@ jobs:
   build-frontend:
     name: Build & push frontend
     needs: changes
-    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch'
+    if: needs.changes.outputs.frontend == 'true' || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -84,7 +84,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME}"
           if [[ ! "$VERSION" =~ ^v ]]; then
-            VERSION="build-${GITHUB_SHA::7}"
+            VERSION="dev-${GITHUB_SHA::7}"
           fi
           echo "{\"version\":\"$VERSION\"}" > frontend/public/version.json
 
@@ -94,10 +94,10 @@ jobs:
           docker push $ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }}
           docker push $ECR_REGISTRY/$FRONTEND_IMAGE:latest
 
-  deploy:
-    name: Deploy to EKS
+  deploy-dev:
+    name: Deploy to Dev
     needs: [build-backend, build-frontend]
-    if: always() && (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
+    if: always() && !startsWith(github.ref, 'refs/tags/v') && (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -114,23 +114,71 @@ jobs:
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name $EKS_CLUSTER --region $AWS_REGION
 
+      - name: Ensure dev namespace
+        run: kubectl create namespace dev --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy manifests to dev
+        run: |
+          kubectl apply -f k8s/ -n dev
+
       - name: Deploy backend
         if: needs.build-backend.result == 'success'
         run: |
           kubectl set image deployment/lahoucine-app \
-            lahoucine-app=$ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }}
-          kubectl rollout status deployment/lahoucine-app --timeout=120s
+            lahoucine-app=$ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }} -n dev
+          kubectl rollout status deployment/lahoucine-app -n dev --timeout=120s
 
       - name: Deploy frontend
         if: needs.build-frontend.result == 'success'
         run: |
           kubectl set image deployment/lahoucine-app-frontend \
-            lahoucine-app-frontend=$ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }}
-          kubectl rollout status deployment/lahoucine-app-frontend --timeout=120s
+            lahoucine-app-frontend=$ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }} -n dev
+          kubectl rollout status deployment/lahoucine-app-frontend -n dev --timeout=120s
+
+  deploy-prod:
+    name: Deploy to Prod
+    needs: [build-backend, build-frontend]
+    if: always() && startsWith(github.ref, 'refs/tags/v') && (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER --region $AWS_REGION
+
+      - name: Ensure prod namespace
+        run: kubectl create namespace prod --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy manifests to prod
+        run: |
+          kubectl apply -f k8s/ -n prod
+
+      - name: Deploy backend
+        if: needs.build-backend.result == 'success'
+        run: |
+          kubectl set image deployment/lahoucine-app \
+            lahoucine-app=$ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }} -n prod
+          kubectl rollout status deployment/lahoucine-app -n prod --timeout=120s
+
+      - name: Deploy frontend
+        if: needs.build-frontend.result == 'success'
+        run: |
+          kubectl set image deployment/lahoucine-app-frontend \
+            lahoucine-app-frontend=$ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }} -n prod
+          kubectl rollout status deployment/lahoucine-app-frontend -n prod --timeout=120s
 
   release:
     name: Create GitHub Release
-    needs: deploy
+    needs: deploy-prod
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
