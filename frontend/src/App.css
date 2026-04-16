@@ -134,6 +134,7 @@ header {
   font-family: inherit;
   transition: border-color 0.2s, box-shadow 0.2s;
   background: #fafafa;
+  color: #1a1a2e;
 }
 
 .add-form input[type='text']:focus,
