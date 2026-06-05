@@ -6,6 +6,8 @@ A full-stack application for managing dog breeds with photos, running on Amazon 
 - **Frontend**: React (Vite) served by Nginx
 - **Infrastructure**: CloudFormation (VPC, EKS, S3, EBS CSI Driver) with AWS Load Balancer Controller
 
+> **First-time deploy?** Follow [INITIAL_DEPLOY.md](INITIAL_DEPLOY.md) — it covers SSO setup, SCP-compliant tagging, ALB controller install, ECR + ACM, the Datadog/CloudPrem stack, DB seeding, and verification. The sections below are the original step-by-step reference for the base infra and app.
+
 ## Architecture
 
 ```
@@ -98,12 +100,12 @@ Reference: https://docs.aws.amazon.com/eks/latest/userguide/lbc-helm.html
 
 ### 3.1 Create IAM policy
 
-```bash
-curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.14.1/docs/install/iam_policy.json
+The policy is vendored at [k8s/alb-controller/iam_policy.json](k8s/alb-controller/iam_policy.json) (pinned to controller v2.14.1).
 
+```bash
 aws iam create-policy \
   --policy-name AWSLoadBalancerControllerIAMPolicy-lahoucine \
-  --policy-document file://iam_policy.json
+  --policy-document file://k8s/alb-controller/iam_policy.json
 ```
 
 ### 3.2 Create IAM service account
@@ -195,36 +197,36 @@ cd ..
 
 ## 6. Deploy to Kubernetes
 
-Apply all manifests:
+The app runs in a single namespace (`prod`). Apply all manifests:
 
 ```bash
-kubectl apply -f k8s/
+kubectl create namespace prod --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -f k8s/ -n prod
 ```
 
 Check that all pods are running:
 
 ```bash
-kubectl get pods
+kubectl get pods -n prod
 ```
 
-Expected output:
+Expected output (one replica each):
 
 ```
 NAME                                       READY   STATUS    RESTARTS   AGE
 lahoucine-app-xxxxxxxxx-xxxxx              1/1     Running   0          ...
-lahoucine-app-xxxxxxxxx-xxxxx              1/1     Running   0          ...
-lahoucine-app-xxxxxxxxx-xxxxx              1/1     Running   0          ...
-lahoucine-app-frontend-xxxxxxxxx-xxxxx     1/1     Running   0          ...
 lahoucine-app-frontend-xxxxxxxxx-xxxxx     1/1     Running   0          ...
 postgres-xxxxxxxxx-xxxxx                   1/1     Running   0          ...
 ```
+
+CI/CD: pushes to `main` trigger [.github/workflows/deploy.yaml](.github/workflows/deploy.yaml) which builds the backend and frontend images and rolls them into the `prod` namespace.
 
 ## 7. Access the Application
 
 Get the ALB URL:
 
 ```bash
-kubectl get ingress lahoucine-app-ingress
+kubectl get ingress -n prod lahoucine-app-ingress
 ```
 
 The `ADDRESS` column shows the ALB hostname. Open it in your browser:
@@ -265,57 +267,52 @@ curl http://<ALB-ADDRESS>/api/dogs
 ### Logs
 
 ```bash
-# Flask API logs
-kubectl logs -l app=lahoucine-app
-
-# Frontend logs
-kubectl logs -l app=lahoucine-app-frontend
-
-# PostgreSQL logs
-kubectl logs -l app=postgres
+kubectl logs -n prod -l app=lahoucine-app
+kubectl logs -n prod -l app=lahoucine-app-frontend
+kubectl logs -n prod -l app=postgres
 ```
 
 ### Restart a deployment
 
 ```bash
-kubectl rollout restart deployment lahoucine-app
-kubectl rollout restart deployment lahoucine-app-frontend
+kubectl rollout restart deployment lahoucine-app          -n prod
+kubectl rollout restart deployment lahoucine-app-frontend -n prod
 ```
 
 ### Redeploy after code changes
 
+Pushing to `main` builds and rolls automatically via [.github/workflows/deploy.yaml](.github/workflows/deploy.yaml). To do it by hand:
+
 ```bash
-# Rebuild and push the image
 docker build --platform linux/amd64 -t lahoucine-flask .
 docker tag lahoucine-flask:latest 369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-flask:latest
 docker push 369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-flask:latest
-
-# Restart the deployment to pull the new image
-kubectl rollout restart deployment lahoucine-app
+kubectl rollout restart deployment lahoucine-app -n prod
 ```
 
 ### Connect to PostgreSQL
 
 ```bash
-kubectl exec -it deployment/postgres -- psql -U postgres -d dogsdb
+kubectl exec -n prod -it deployment/postgres -- psql -U postgres -d dogsdb
 ```
 
 ### Port-forward for local testing
 
 ```bash
-# Frontend
-kubectl port-forward svc/lahoucine-app-frontend 8080:80
-
-# API directly
-kubectl port-forward svc/lahoucine-app 8081:80
+kubectl port-forward -n prod svc/lahoucine-app-frontend 8080:80
+kubectl port-forward -n prod svc/lahoucine-app          8081:80
 ```
+
+## Monitoring
+
+Datadog stack (operator, agent, OPW, Cloudprem) is set up in [`datadog/`](datadog/). See [datadog/README.md](datadog/README.md) for the install steps and [.github/workflows/cloudprem.yaml](.github/workflows/cloudprem.yaml) for the automated deploy.
 
 ## Cleanup
 
 ### Delete Kubernetes resources
 
 ```bash
-kubectl delete -f k8s/
+kubectl delete -f k8s/ -n prod
 ```
 
 ### Uninstall ALB controller
@@ -337,9 +334,14 @@ aws ecr delete-repository --repository-name lahoucine-flask --force --region eu-
 aws ecr delete-repository --repository-name lahoucine-app-frontend --force --region eu-west-2
 ```
 
-### Delete CloudFormation stack
+### Delete CloudFormation stacks
 
 ```bash
-aws cloudformation delete-stack --stack-name lahoucine-cluster --region eu-west-2
-aws cloudformation wait stack-delete-complete --stack-name lahoucine-cluster --region eu-west-2
+# Cloudprem dependencies first (RDS + S3 + IRSA — bucket has Retain policy)
+aws cloudformation delete-stack --stack-name lahoucine-cloudprem-infra --region eu-west-2
+aws cloudformation wait stack-delete-complete --stack-name lahoucine-cloudprem-infra --region eu-west-2
+
+# Then the base infra
+aws cloudformation delete-stack --stack-name lahoucine-stack-1 --region eu-west-2
+aws cloudformation wait stack-delete-complete --stack-name lahoucine-stack-1 --region eu-west-2
 ```
