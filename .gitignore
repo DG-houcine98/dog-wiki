@@ -22,8 +22,8 @@ venv/
 .env
 .env.local
 
-# AWS
-iam_policy.json
+# AWS — ignore the throwaway root copy; the vendored one at k8s/alb-controller/ is tracked
+/iam_policy.json
 
 # Claude
 .claude/
