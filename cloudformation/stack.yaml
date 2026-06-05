@@ -26,6 +26,10 @@ Parameters:
     Type: String
     Default: pre-sales-engineering
     Description: Hyphenated lowercase team identifier for the SCP-required `team` tag (e.g. technical-support-engineer, technical-escalation-engineering, pre-sales-engineering).
+  GitHubActionsRoleName:
+    Type: String
+    Default: github-actions-lahoucine-cluster
+    Description: Name of the pre-existing IAM role assumed by GitHub Actions via OIDC. Receives an EKS Access Entry + a least-privilege CloudFormation/IAM/RDS/S3 policy from this stack.
 
 Resources:
 
@@ -229,6 +233,8 @@ Resources:
           - !Ref PrivateSubnet2
         SecurityGroupIds:
           - !Ref ClusterSecurityGroup
+      AccessConfig:
+        AuthenticationMode: API_AND_CONFIG_MAP
       UpgradePolicy:
         SupportType: STANDARD
       Tags:
@@ -419,6 +425,143 @@ Resources:
               - s3:PutObject
               - s3:DeleteObject
             Resource: !Sub 'arn:aws:s3:::${S3BucketName}/*'
+
+  # ==================== GitHub Actions: EKS access + scoped AWS permissions ====================
+
+  GitHubActionsAccessEntry:
+    Type: AWS::EKS::AccessEntry
+    DependsOn: EKSCluster
+    Properties:
+      ClusterName: !Ref ClusterName
+      PrincipalArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${GitHubActionsRoleName}'
+      Type: STANDARD
+      AccessPolicies:
+        - PolicyArn: arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy
+          AccessScope:
+            Type: cluster
+
+  GitHubActionsDeployPolicy:
+    Type: AWS::IAM::RolePolicy
+    Properties:
+      RoleName: !Ref GitHubActionsRoleName
+      PolicyName: lahoucine-deploy-access
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationStacks
+            Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResource
+              - cloudformation:DescribeStackResources
+              - cloudformation:ListStackResources
+              - cloudformation:GetTemplate
+              - cloudformation:GetTemplateSummary
+              - cloudformation:CreateChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DeleteChangeSet
+            Resource:
+              - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
+              - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/lahoucine-cloudprem-infra/*'
+
+          - Sid: IAMManageCloudPremResources
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:DeleteRole
+              - iam:GetRole
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:ListAttachedRolePolicies
+              - iam:ListRolePolicies
+              - iam:GetRolePolicy
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:PassRole
+            Resource:
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-cp-*'
+
+          - Sid: IAMManageCloudPremPolicy
+            Effect: Allow
+            Action:
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:ListPolicyVersions
+              - iam:TagPolicy
+              - iam:UntagPolicy
+            Resource:
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/lahoucine-cp-*'
+
+          - Sid: RDSMetastore
+            Effect: Allow
+            Action:
+              - rds:CreateDBSubnetGroup
+              - rds:DeleteDBSubnetGroup
+              - rds:DescribeDBSubnetGroups
+              - rds:ModifyDBSubnetGroup
+              - rds:CreateDBInstance
+              - rds:DeleteDBInstance
+              - rds:DescribeDBInstances
+              - rds:ModifyDBInstance
+              - rds:AddTagsToResource
+              - rds:RemoveTagsFromResource
+              - rds:ListTagsForResource
+            Resource: '*'
+
+          - Sid: S3CloudPremBucket
+            Effect: Allow
+            Action:
+              - s3:CreateBucket
+              - s3:DeleteBucket
+              - s3:GetBucketLocation
+              - s3:GetBucketTagging
+              - s3:PutBucketTagging
+              - s3:PutBucketPublicAccessBlock
+              - s3:GetBucketPublicAccessBlock
+              - s3:PutBucketVersioning
+              - s3:GetBucketVersioning
+              - s3:PutBucketPolicy
+              - s3:GetBucketPolicy
+              - s3:ListBucket
+            Resource:
+              - !Sub 'arn:aws:s3:::lahoucine-cp-bucket-*'
+
+          - Sid: EC2NetworkingReadAndSGs
+            Effect: Allow
+            Action:
+              - ec2:DescribeVpcs
+              - ec2:DescribeSubnets
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSecurityGroupRules
+              - ec2:DescribeAvailabilityZones
+              - ec2:DescribeAccountAttributes
+              - ec2:CreateSecurityGroup
+              - ec2:DeleteSecurityGroup
+              - ec2:AuthorizeSecurityGroupIngress
+              - ec2:RevokeSecurityGroupIngress
+              - ec2:AuthorizeSecurityGroupEgress
+              - ec2:RevokeSecurityGroupEgress
+              - ec2:CreateTags
+              - ec2:DeleteTags
+            Resource: '*'
+
+          - Sid: CloudFormationListAllStacks
+            Effect: Allow
+            Action:
+              - cloudformation:ListStacks
+              - cloudformation:ListExports
+            Resource: '*'
 
 Outputs:
   VPCId:
