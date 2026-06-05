@@ -1,16 +1,36 @@
 import io
 import os
+import re
 import time
 import uuid
 
 import boto3
 import psycopg2
+from PIL import Image
 from flask import Flask, jsonify, request, send_file
 
 app = Flask(__name__)
 
 S3_BUCKET = os.environ.get('S3_BUCKET')
 AWS_REGION = os.environ.get('AWS_REGION', 'eu-west-2')
+
+
+def _breed_to_key(breed):
+    pascal = ''.join(w.capitalize() for w in re.split(r'\s+', breed.strip()))
+    safe = re.sub(r'[^A-Za-z0-9]', '', pascal)
+    return f'dogs/{safe}.webp'
+
+
+def _to_webp_bytes(photo):
+    img = Image.open(photo.stream)
+    if img.mode in ('RGBA', 'LA', 'P'):
+        img = img.convert('RGBA')
+    else:
+        img = img.convert('RGB')
+    buf = io.BytesIO()
+    img.save(buf, format='WEBP', quality=85)
+    buf.seek(0)
+    return buf
 DB_HOST = os.environ.get('DB_HOST', 'postgres')
 DB_NAME = os.environ.get('DB_NAME', 'dogsdb')
 DB_USER = os.environ.get('DB_USER', 'postgres')
@@ -146,11 +166,10 @@ def update_dog(dog_id):
 
     photo_key = row[1]
     if photo:
-        ext = photo.filename.rsplit('.', 1)[-1] if '.' in photo.filename else 'jpg'
-        photo_key = f'dogs/{dog_id}.{ext}'
+        photo_key = _breed_to_key(breed)
         s3.upload_fileobj(
-            photo, S3_BUCKET, photo_key,
-            ExtraArgs={'ContentType': photo.content_type},
+            _to_webp_bytes(photo), S3_BUCKET, photo_key,
+            ExtraArgs={'ContentType': 'image/webp'},
         )
 
     cur.execute(
@@ -200,11 +219,10 @@ def create_dog():
     photo_key = None
 
     if photo:
-        ext = photo.filename.rsplit('.', 1)[-1] if '.' in photo.filename else 'jpg'
-        photo_key = f'dogs/{dog_id}.{ext}'
+        photo_key = _breed_to_key(breed)
         s3.upload_fileobj(
-            photo, S3_BUCKET, photo_key,
-            ExtraArgs={'ContentType': photo.content_type},
+            _to_webp_bytes(photo), S3_BUCKET, photo_key,
+            ExtraArgs={'ContentType': 'image/webp'},
         )
 
     conn = get_db()

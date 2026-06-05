@@ -13,7 +13,19 @@ Parameters:
     Default: 2
   KubernetesVersion:
     Type: String
-    Default: '1.31'
+    Default: '1.34'
+  S3BucketName:
+    Type: String
+    Default: lahoucine-cluster-dog-photos-369042512949
+    Description: Name of an existing S3 bucket for dog photos. The bucket is intentionally managed OUTSIDE this stack so it survives delete-stack and FinOps wipes; IAM policies here just reference it by ARN.
+  Creator:
+    Type: String
+    Default: lahoucine.elhaouri
+    Description: Email prefix used for the SCP-required `creator` tag on EKS resources.
+  Team:
+    Type: String
+    Default: pre-sales-engineering
+    Description: Hyphenated lowercase team identifier for the SCP-required `team` tag (e.g. technical-support-engineer, technical-escalation-engineering, pre-sales-engineering).
 
 Resources:
 
@@ -178,24 +190,6 @@ Resources:
       SubnetId: !Ref PrivateSubnet2
       RouteTableId: !Ref PrivateRouteTable
 
-  # ==================== S3 ====================
-
-  DogPhotosBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub '${ClusterName}-dog-photos-${AWS::AccountId}'
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
-      CorsConfiguration:
-        CorsRules:
-          - AllowedHeaders: ['*']
-            AllowedMethods: [GET]
-            AllowedOrigins: ['*']
-            MaxAge: 3600
-
   # ==================== EKS ====================
 
   EKSClusterRole:
@@ -235,6 +229,13 @@ Resources:
           - !Ref PrivateSubnet2
         SecurityGroupIds:
           - !Ref ClusterSecurityGroup
+      UpgradePolicy:
+        SupportType: STANDARD
+      Tags:
+        - Key: creator
+          Value: !Ref Creator
+        - Key: team
+          Value: !Ref Team
 
   NodeGroupRole:
     Type: AWS::IAM::Role
@@ -266,11 +267,11 @@ Resources:
               - s3:PutObject
               - s3:GetObject
               - s3:DeleteObject
-            Resource: !Sub '${DogPhotosBucket.Arn}/*'
+            Resource: !Sub 'arn:aws:s3:::${S3BucketName}/*'
           - Effect: Allow
             Action:
               - s3:ListBucket
-            Resource: !GetAtt DogPhotosBucket.Arn
+            Resource: !Sub 'arn:aws:s3:::${S3BucketName}'
 
   NodeLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
@@ -301,6 +302,9 @@ Resources:
         MinSize: 1
         MaxSize: 4
         DesiredSize: !Ref DesiredCapacity
+      Tags:
+        creator: !Ref Creator
+        team: !Ref Team
 
   # ==================== OIDC & EBS CSI Driver ====================
 
@@ -359,17 +363,99 @@ Resources:
       AddonName: aws-ebs-csi-driver
       ServiceAccountRoleArn: !GetAtt EBSCSIDriverRole.Arn
 
+  # ==================== App IRSA (S3 access for lahoucine-app pods) ====================
+
+  AppS3Role:
+    Type: AWS::IAM::Role
+    DependsOn: OIDCProvider
+    Properties:
+      RoleName: !Sub '${ClusterName}-app-s3'
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": "${OidcArn}"
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "${OidcUrl}:aud": "sts.amazonaws.com"
+                    },
+                    "StringLike": {
+                      "${OidcUrl}:sub": "system:serviceaccount:*:lahoucine-app"
+                    }
+                  }
+                }
+              ]
+            }
+          - OidcArn: !Ref OIDCProvider
+            OidcUrl: !Select
+              - 1
+              - !Split
+                - '//'
+                - !GetAtt EKSCluster.OpenIdConnectIssuerUrl
+
+  AppS3Policy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub '${ClusterName}-app-s3-access'
+      Roles:
+        - !Ref AppS3Role
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource: !Sub 'arn:aws:s3:::${S3BucketName}'
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub 'arn:aws:s3:::${S3BucketName}/*'
+
 Outputs:
   VPCId:
     Value: !Ref VPC
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcId'
+  VpcCidr:
+    Value: 10.0.0.0/16
+    Export:
+      Name: !Sub '${AWS::StackName}-VpcCidr'
+  PrivateSubnet1Id:
+    Value: !Ref PrivateSubnet1
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnet1Id'
+  PrivateSubnet2Id:
+    Value: !Ref PrivateSubnet2
+    Export:
+      Name: !Sub '${AWS::StackName}-PrivateSubnet2Id'
   ClusterName:
     Value: !Ref ClusterName
+    Export:
+      Name: !Sub '${AWS::StackName}-ClusterName'
   ClusterEndpoint:
     Value: !GetAtt EKSCluster.Endpoint
   S3BucketName:
-    Value: !Ref DogPhotosBucket
+    Value: !Ref S3BucketName
   EBSCSIDriverRoleArn:
     Value: !GetAtt EBSCSIDriverRole.Arn
     Description: IAM role used by the EBS CSI driver addon
   OIDCProviderArn:
     Value: !GetAtt OIDCProvider.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-OIDCProviderArn'
+  OIDCIssuerUrl:
+    Value: !GetAtt EKSCluster.OpenIdConnectIssuerUrl
+    Export:
+      Name: !Sub '${AWS::StackName}-OIDCIssuerUrl'
+  AppS3RoleArn:
+    Value: !GetAtt AppS3Role.Arn
+    Description: IAM role for lahoucine-app pods via IRSA (SA named lahoucine-app in any namespace)

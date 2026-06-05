@@ -5,7 +5,7 @@ metadata:
   labels:
     app: lahoucine-app
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: lahoucine-app
@@ -14,6 +14,7 @@ spec:
       labels:
         app: lahoucine-app
     spec:
+      serviceAccountName: lahoucine-app
       containers:
         - name: lahoucine-app
           image: 369042512949.dkr.ecr.eu-west-2.amazonaws.com/lahoucine-flask:latest
