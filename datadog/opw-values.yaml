@@ -1,0 +1,37 @@
+# Observability Pipelines Worker Configuration
+# apiKey and pipelineId are passed at deploy time via --set
+datadog: {}
+
+replicas: 2
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: lahoucine-opw-sa
+
+# Service configuration
+service:
+  type: ClusterIP
+  ports:
+  - name: dd-op-source-datadog-agent-address-port
+    protocol: TCP
+    port: 8282
+    targetPort: 8282
+
+# Resource requests and limits
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "50m"
+  limits:
+    memory: "256Mi"
+    cpu: "100m"
+
+# Environment variables
+env:
+  - name: DD_OP_SOURCE_DATADOG_AGENT_ADDRESS
+    value: "0.0.0.0:8282"
+  - name: SOURCE_DATADOG_AGENT_ADDRESS
+    value: "0.0.0.0:8282"
+  # - name: DESTINATION_CLOUDPREM_ENDPOINT_URL
+  #   value: "http://cp-cloudprem-indexer.datadog.svc.cluster.local:7280"

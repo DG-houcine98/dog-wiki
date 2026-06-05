@@ -1,0 +1,201 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudPrem dependencies (RDS Postgres metastore, S3 splits bucket, IRSA role) for an existing EKS cluster. Imports networking + OIDC from the parent stack.
+
+Parameters:
+  ParentStackName:
+    Type: String
+    Default: lahoucine-stack-1
+    Description: Name of the stack that exports VPC, private subnets, OIDC, etc.
+
+  CloudPremNamespace:
+    Type: String
+    Default: cloudprem
+    Description: Kubernetes namespace where CloudPrem pods run. The IRSA trust policy is scoped to service accounts in this namespace.
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Master password for the CloudPrem PostgreSQL metastore.
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+
+  DBAllocatedStorage:
+    Type: Number
+    Default: 20
+
+  ResourcePrefix:
+    Type: String
+    Default: lahoucine-cp
+    Description: Name prefix applied to RDS, S3, and IAM resources created by this stack.
+
+Resources:
+
+  # ==================== RDS Postgres (metastore) ====================
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: !Sub '${ResourcePrefix} private subnets for RDS'
+      SubnetIds:
+        - Fn::ImportValue: !Sub '${ParentStackName}-PrivateSubnet1Id'
+        - Fn::ImportValue: !Sub '${ParentStackName}-PrivateSubnet2Id'
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-db-subnet-group'
+
+  DBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Postgres from within the cluster VPC
+      VpcId:
+        Fn::ImportValue: !Sub '${ParentStackName}-VpcId'
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          CidrIp:
+            Fn::ImportValue: !Sub '${ParentStackName}-VpcCidr'
+          Description: Postgres from VPC CIDR
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-db-sg'
+
+  PostgresDB:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub '${ResourcePrefix}-postgres'
+      Engine: postgres
+      EngineVersion: '16.6'
+      DBInstanceClass: !Ref DBInstanceClass
+      AllocatedStorage: !Ref DBAllocatedStorage
+      MasterUsername: cloudprem
+      MasterUserPassword: !Ref DBPassword
+      DBName: cloudprem
+      VPCSecurityGroups:
+        - !Ref DBSecurityGroup
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      PubliclyAccessible: false
+      StorageType: gp3
+      BackupRetentionPeriod: 0
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-postgres'
+
+  # ==================== S3 (CloudPrem splits) ====================
+
+  CloudPremBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub '${ResourcePrefix}-bucket-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-bucket'
+
+  # ==================== IAM (IRSA for CloudPrem pods) ====================
+
+  CloudPremS3Policy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${ResourcePrefix}-s3-access'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+              - s3:ListBucket
+              - s3:AbortMultipartUpload
+              - s3:ListBucketMultipartUploads
+              - s3:ListMultipartUploadParts
+            Resource:
+              - !GetAtt CloudPremBucket.Arn
+              - !Sub '${CloudPremBucket.Arn}/*'
+
+  CloudPremIRSARole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ResourcePrefix}-role'
+      AssumeRolePolicyDocument:
+        Fn::Sub:
+          - |
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Principal": {
+                    "Federated": "${OidcArn}"
+                  },
+                  "Action": "sts:AssumeRoleWithWebIdentity",
+                  "Condition": {
+                    "StringEquals": {
+                      "${OidcUrl}:aud": "sts.amazonaws.com"
+                    },
+                    "StringLike": {
+                      "${OidcUrl}:sub": "system:serviceaccount:${CloudPremNamespace}:*"
+                    }
+                  }
+                }
+              ]
+            }
+          - OidcArn:
+              Fn::ImportValue: !Sub '${ParentStackName}-OIDCProviderArn'
+            OidcUrl:
+              !Select
+                - 1
+                - !Split
+                  - '//'
+                  - Fn::ImportValue: !Sub '${ParentStackName}-OIDCIssuerUrl'
+            CloudPremNamespace: !Ref CloudPremNamespace
+      ManagedPolicyArns:
+        - !Ref CloudPremS3Policy
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-role'
+
+Outputs:
+  DatabaseEndpoint:
+    Value: !GetAtt PostgresDB.Endpoint.Address
+    Description: RDS Postgres endpoint for the cloudprem-metastore-uri secret
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabaseEndpoint'
+
+  DatabasePort:
+    Value: !GetAtt PostgresDB.Endpoint.Port
+    Export:
+      Name: !Sub '${AWS::StackName}-DatabasePort'
+
+  S3BucketName:
+    Value: !Ref CloudPremBucket
+    Description: Bucket for default_index_root_uri in cp-values.yaml
+    Export:
+      Name: !Sub '${AWS::StackName}-S3BucketName'
+
+  IRSARoleName:
+    Value: !Ref CloudPremIRSARole
+    Description: IAM role name for serviceAccount.eksRoleName in cp-values.yaml
+    Export:
+      Name: !Sub '${AWS::StackName}-IRSARoleName'
+
+  IRSARoleArn:
+    Value: !GetAtt CloudPremIRSARole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-IRSARoleArn'
+
+  CloudPremNamespace:
+    Value: !Ref CloudPremNamespace
+    Export:
+      Name: !Sub '${AWS::StackName}-CloudPremNamespace'
