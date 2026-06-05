@@ -98,7 +98,7 @@ jobs:
           docker push $ECR_REGISTRY/$FRONTEND_IMAGE:latest
 
   deploy:
-    name: Deploy to ${{ env.APP_NAMESPACE }}
+    name: Deploy to prod
     needs: [build-backend, build-frontend]
     if: always() && (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success' || (needs.build-backend.result == 'skipped' && needs.build-frontend.result == 'skipped'))
     runs-on: ubuntu-latest
