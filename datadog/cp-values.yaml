@@ -1,0 +1,57 @@
+# Static values for the CloudPrem helm chart.
+# Values that depend on the CloudPrem infra stack outputs are overridden via
+# `--set` in the GitHub Actions workflow:
+#   - aws.accountId
+#   - serviceAccount.name        (= ${CloudPremNamespace} from the stack)
+#   - serviceAccount.eksRoleName (= IRSARoleName output)
+#   - config.default_index_root_uri (built from S3BucketName output)
+aws:
+  accountId: "369042512949"
+
+environment:
+  AWS_REGION: eu-west-2
+
+datadog:
+  apiKeyExistingSecret: datadog-secret
+
+serviceAccount:
+  create: true
+  name: cloudprem
+  eksRoleName: lahoucine-cp-role
+  extraAnnotations: {}
+
+config:
+  default_index_root_uri: s3://lahoucine-cp-bucket-369042512949/indexes/cloudprem
+
+ingress:
+  internal:
+    enabled: true
+    name: cloudprem-internal
+    host: cloudprem.lahoucine.internal
+    extraAnnotations:
+      alb.ingress.kubernetes.io/load-balancer-name: cloudprem-internal
+
+metastore:
+  extraEnvFrom:
+    - secretRef:
+        name: cloudprem-metastore-uri
+
+indexer:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "4Gi"
+
+searcher:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "1"
+      memory: "2Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"

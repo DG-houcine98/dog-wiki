@@ -1,0 +1,142 @@
+name: Deploy CloudPrem
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'datadog/**'
+      - '.github/workflows/cloudprem.yaml'
+  workflow_dispatch:
+    inputs:
+      cloudprem_namespace:
+        description: Kubernetes namespace for CloudPrem pods
+        required: false
+        default: cloudprem
+
+env:
+  AWS_REGION: eu-west-2
+  EKS_CLUSTER: lahoucine-cluster
+  PARENT_STACK: lahoucine-stack-1
+  INFRA_STACK: lahoucine-cloudprem-infra
+  CLOUDPREM_NS: ${{ inputs.cloudprem_namespace || 'cloudprem' }}
+
+jobs:
+  deploy:
+    name: Deploy CloudPrem infra + chart
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Sanity-check parent stack exists
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name "$PARENT_STACK" \
+            --query 'Stacks[0].StackStatus' --output text
+
+      - name: Deploy CloudPrem infra (RDS + S3 + IRSA)
+        run: |
+          aws cloudformation deploy \
+            --stack-name "$INFRA_STACK" \
+            --template-file datadog/cloudformation/cloudprem-infra.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              ParentStackName=$PARENT_STACK \
+              CloudPremNamespace=$CLOUDPREM_NS \
+              DBPassword=${{ secrets.CLOUDPREM_DB_PASSWORD }} \
+            --tags \
+              Creator=lahoucine.elhaouri \
+              Team='Sales Engineer' \
+              TTL=2026-09-05 \
+              Purpose='Internal training' \
+            --no-fail-on-empty-changeset
+
+      - name: Read infra stack outputs
+        id: outputs
+        run: |
+          aws cloudformation describe-stacks --stack-name "$INFRA_STACK" \
+            --query 'Stacks[0].Outputs[].[OutputKey,OutputValue]' --output text \
+            | while read key val; do echo "${key}=${val}" >> "$GITHUB_OUTPUT"; done
+
+      - name: Setup kubectl + helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name $EKS_CLUSTER --region $AWS_REGION
+
+      - name: Ensure Datadog namespace + api-key secret
+        run: |
+          kubectl create namespace datadog --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic datadog-secret \
+            --from-literal api-key='${{ secrets.DD_API_KEY }}' \
+            --namespace datadog \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Install/upgrade Datadog Operator
+        run: |
+          helm repo add datadog https://helm.datadoghq.com
+          helm repo update datadog
+          helm upgrade --install datadog-operator datadog/datadog-operator \
+            --namespace datadog --create-namespace
+
+      - name: Apply DatadogAgent CR
+        run: kubectl apply -f datadog/datadog.yaml
+
+      - name: Install/upgrade OPW
+        run: |
+          helm upgrade --install opw datadog/observability-pipelines-worker \
+            -n datadog \
+            -f datadog/opw-values.yaml \
+            --set datadog.apiKey='${{ secrets.DD_API_KEY }}' \
+            --set datadog.pipelineId='${{ vars.DD_PIPELINE_ID }}'
+
+      - name: Ensure CloudPrem namespace + secrets
+        run: |
+          kubectl create namespace $CLOUDPREM_NS --dry-run=client -o yaml | kubectl apply -f -
+
+          kubectl create secret generic datadog-secret \
+            --from-literal api-key='${{ secrets.DD_API_KEY }}' \
+            --namespace $CLOUDPREM_NS \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+          DB_HOST='${{ steps.outputs.outputs.DatabaseEndpoint }}'
+          DB_PORT='${{ steps.outputs.outputs.DatabasePort }}'
+          METASTORE_URI="postgres://cloudprem:${{ secrets.CLOUDPREM_DB_PASSWORD }}@${DB_HOST}:${DB_PORT}/cloudprem"
+          kubectl create secret generic cloudprem-metastore-uri \
+            --from-literal QW_METASTORE_URI="$METASTORE_URI" \
+            --namespace $CLOUDPREM_NS \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Install/upgrade CloudPrem chart
+        run: |
+          BUCKET='${{ steps.outputs.outputs.S3BucketName }}'
+          IRSA_ROLE='${{ steps.outputs.outputs.IRSARoleName }}'
+
+          helm upgrade --install cp datadog/cloudprem \
+            -n $CLOUDPREM_NS \
+            -f datadog/cp-values.yaml \
+            --set serviceAccount.name=$CLOUDPREM_NS \
+            --set serviceAccount.eksRoleName=$IRSA_ROLE \
+            --set config.default_index_root_uri="s3://${BUCKET}/indexes/${CLOUDPREM_NS}"
+
+      - name: Wait for CloudPrem rollout
+        run: |
+          kubectl rollout status statefulset/cp-cloudprem-searcher -n $CLOUDPREM_NS --timeout=5m || true
+          kubectl get pods -n $CLOUDPREM_NS
+
+      - name: Smoke test the searcher
+        run: |
+          kubectl exec -n $CLOUDPREM_NS cp-cloudprem-searcher-0 -- \
+            curl -sf 'http://localhost:7280/api/v1/datadog/search?query=' \
+            | head -c 500

@@ -1,0 +1,65 @@
+kind: "DatadogAgent"
+apiVersion: "datadoghq.com/v2alpha1"
+metadata:
+  name: "datadog"
+  namespace: datadog
+spec:
+  global:
+    clusterName: "lahoucine-cluster"
+    site: "datadoghq.com"
+    credentials:
+      apiSecret:
+        secretName: "datadog-secret"
+        keyName: "api-key"
+    # --- CHOOSE ONE OF THE THREE ROUTING OPTIONS BELOW ---
+    #
+    # OPTION 1 (active): Logs → Observability Pipelines Worker → CloudPrem
+    #   Agent sends logs to OPW, which then forwards them to CloudPrem.
+    #   Use this when you want OPW to handle transformation/routing.
+    env:
+      - name: DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED
+        value: "true"
+      - name: DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL
+        value: "http://opw-observability-pipelines-worker.datadog.svc.cluster.local:8282"
+    #
+    # OPTION 2: Logs → CloudPrem directly (bypass OPW)
+    #   Agent sends logs straight to the CloudPrem indexer.
+    #   Comment out Option 1 above and uncomment the env block below.
+    # env:
+    #   - name: DD_LOGS_CONFIG_LOGS_DD_URL
+    #     value: "http://cp-cloudprem-indexer.cloudprem.svc.cluster.local:7280"
+    #
+    # OPTION 3: Logs → Datadog directly (no CloudPrem, no OPW)
+    #   Remove the env block entirely. Logs go to the site set above (datadoghq.com).
+    # (no env override needed)
+  features:
+    clusterChecks:
+      enabled: true
+    orchestratorExplorer:
+      enabled: true
+    logCollection:
+      enabled: true
+      containerCollectAll: true
+    apm:
+      instrumentation:
+        enabled: true
+        targets:
+          - name: "default-target"
+            namespaceSelector:
+              matchNames:
+                - "prod"
+                - "dev"
+            ddTraceVersions:
+              python: "4"
+              js: "5"
+            ddTraceConfigs:
+              - name: "DD_RUM_ENABLED"
+                value: "true"
+              - name: "DD_RUM_APPLICATION_ID"
+                value: "d414b7c4-2108-4f2a-9f25-eff381c2bad5"
+              - name: "DD_RUM_CLIENT_TOKEN"
+                value: "pub18d20e529c36d6611797c708aedfd9b3"
+              - name: "DD_RUM_REMOTE_CONFIGURATION_ID"
+                value: "fcfbef48-5526-454d-a024-6efe97744dd3"
+              - name: "DD_RUM_SITE"
+                value: "datadoghq.com"

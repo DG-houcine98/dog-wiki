@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::369042512949:oidc-provider/oidc.eks.eu-west-2.amazonaws.com/id/22C01E4D8C29880A2FF445D2B190E3D0"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "oidc.eks.eu-west-2.amazonaws.com/id/22C01E4D8C29880A2FF445D2B190E3D0:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "oidc.eks.eu-west-2.amazonaws.com/id/22C01E4D8C29880A2FF445D2B190E3D0:sub": "system:serviceaccount:*:lahoucine-app"
+        }
+      }
+    }
+  ]
+}
