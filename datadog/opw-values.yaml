@@ -33,5 +33,5 @@ env:
     value: "0.0.0.0:8282"
   - name: SOURCE_DATADOG_AGENT_ADDRESS
     value: "0.0.0.0:8282"
-  # - name: DESTINATION_CLOUDPREM_ENDPOINT_URL
-  #   value: "http://cp-cloudprem-indexer.datadog.svc.cluster.local:7280"
+  - name: DESTINATION_CLOUDPREM_ENDPOINT_URL
+    value: "http://cp-cloudprem-indexer.cloudprem.svc.cluster.local:7280"
