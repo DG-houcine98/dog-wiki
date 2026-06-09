@@ -31,27 +31,55 @@ ingress:
     extraAnnotations:
       alb.ingress.kubernetes.io/load-balancer-name: cloudprem-internal
 
+# Sandbox-sized resource requests. Chart defaults are tuned for production
+# (every component requests cpu:2, memory:4Gi) which won't fit on t3.medium.
 metastore:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
   extraEnvFrom:
     - secretRef:
         name: cloudprem-metastore-uri
+
+control_plane:
+  resources:
+    requests:
+      cpu: "200m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+janitor:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
 
 indexer:
   replicaCount: 1
   resources:
     requests:
-      cpu: "1"
-      memory: "2Gi"
+      cpu: "500m"
+      memory: "1Gi"
     limits:
       cpu: "2"
-      memory: "4Gi"
+      memory: "2Gi"
 
 searcher:
   replicaCount: 1
   resources:
     requests:
-      cpu: "1"
-      memory: "2Gi"
+      cpu: "500m"
+      memory: "1Gi"
     limits:
       cpu: "2"
-      memory: "8Gi"
+      memory: "2Gi"
