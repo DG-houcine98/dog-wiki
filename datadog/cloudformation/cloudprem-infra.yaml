@@ -68,7 +68,7 @@ Resources:
     Properties:
       DBInstanceIdentifier: !Sub '${ResourcePrefix}-postgres'
       Engine: postgres
-      EngineVersion: '16.6'
+      EngineVersion: '16.14'
       DBInstanceClass: !Ref DBInstanceClass
       AllocatedStorage: !Ref DBAllocatedStorage
       MasterUsername: cloudprem
