@@ -1,6 +1,7 @@
 import io
 import os
 import re
+import secrets
 import time
 import uuid
 
@@ -431,6 +432,71 @@ def vuln_ssrf():
     with urllib.request.urlopen(url, timeout=5) as resp:
         body = resp.read(4096).decode('utf-8', errors='replace')
     return jsonify(url=url, body=body)
+
+
+# ==========================================================================
+# Demo authentication — intentionally weak.
+# Hardcoded user store, plaintext passwords, in-memory sessions.
+# Hooks into Datadog ASM account-takeover detection via track_user_*_event.
+# DO NOT USE OUTSIDE A SANDBOX.
+# ==========================================================================
+DEMO_USERS = {
+    'admin': 'admin123',
+    'lahoucine': 'password',
+    'demo': 'demo',
+}
+SESSIONS = {}
+
+
+def _appsec_track_login(success, user_id, exists=True):
+    """Notify Datadog ASM about a login attempt. No-op if ddtrace isn't injected."""
+    try:
+        if success:
+            from ddtrace.appsec.trace_utils import track_user_login_success_event
+            from ddtrace import tracer
+            track_user_login_success_event(tracer, user_id=user_id, login=user_id)
+        else:
+            from ddtrace.appsec.trace_utils import track_user_login_failure_event
+            from ddtrace import tracer
+            track_user_login_failure_event(tracer, user_id=user_id, exists=exists, login=user_id)
+    except Exception:
+        pass
+
+
+@app.route('/auth/login', methods=['POST'])
+def auth_login():
+    body = request.get_json(silent=True) or request.form
+    username = (body.get('username') or '').strip()
+    password = body.get('password') or ''
+
+    if not username or not password:
+        return jsonify(error='username and password required'), 400
+
+    expected = DEMO_USERS.get(username)
+    if expected and secrets.compare_digest(expected, password):
+        token = secrets.token_urlsafe(32)
+        SESSIONS[token] = username
+        _appsec_track_login(success=True, user_id=username)
+        return jsonify(token=token, user=username)
+
+    _appsec_track_login(success=False, user_id=username, exists=username in DEMO_USERS)
+    return jsonify(error='invalid credentials'), 401
+
+
+@app.route('/auth/me')
+def auth_me():
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    user = SESSIONS.get(token)
+    if not user:
+        return jsonify(error='unauthorized'), 401
+    return jsonify(user=user)
+
+
+@app.route('/auth/logout', methods=['POST'])
+def auth_logout():
+    token = request.headers.get('Authorization', '').removeprefix('Bearer ').strip()
+    SESSIONS.pop(token, None)
+    return jsonify(ok=True)
 
 
 if __name__ == '__main__':
