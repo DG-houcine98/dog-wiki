@@ -18,6 +18,14 @@ datadogRum.init({
   trackUserInteractions: true,
   trackResources: true,
   trackLongTasks: true,
+  // RUM ↔ APM correlation: inject distributed tracing headers into API calls
+  allowedTracingUrls: [
+    {
+      match: (url) => url.startsWith(window.location.origin + '/api/'),
+      propagatorTypes: ['datadog', 'tracecontext'],
+    },
+  ],
+  traceSampleRate: 100,
 })
 
 createRoot(document.getElementById('root')).render(
