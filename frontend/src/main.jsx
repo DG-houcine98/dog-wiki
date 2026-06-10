@@ -13,7 +13,7 @@ datadogRum.init({
   service: 'lahoucine-app-frontend',
   env: 'prod',
   sessionSampleRate: 100,
-  sessionReplaySampleRate: 20,
+  sessionReplaySampleRate: 100,
   defaultPrivacyLevel: 'mask-user-input',
   trackUserInteractions: true,
   trackResources: true,
