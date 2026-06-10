@@ -40,6 +40,14 @@ spec:
     logCollection:
       enabled: true
       containerCollectAll: true
+    # Cloud Workload Security — runtime threat detection via eBPF.
+    # Adds the security-agent container to the DaemonSet and loads default rules.
+    cws:
+      enabled: true
+      network:
+        enabled: true       # network activity rules (reverse shells, suspicious egress)
+      syscallMonitor:
+        enabled: true       # process / syscall rules
     apm:
       enabled: true
       instrumentation:
