@@ -4,6 +4,9 @@ metadata:
   name: lahoucine-app-frontend
   labels:
     app: lahoucine-app-frontend
+    tags.datadoghq.com/service: lahoucine-app-frontend
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: "1.0.0"
 spec:
   replicas: 1
   selector:
@@ -13,6 +16,9 @@ spec:
     metadata:
       labels:
         app: lahoucine-app-frontend
+        tags.datadoghq.com/service: lahoucine-app-frontend
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: "1.0.0"
     spec:
       containers:
         - name: lahoucine-app-frontend
@@ -20,6 +26,19 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 80
+          env:
+            - name: DD_SERVICE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/service']
+            - name: DD_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/env']
+            - name: DD_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/version']
           livenessProbe:
             httpGet:
               path: /

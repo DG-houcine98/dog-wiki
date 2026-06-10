@@ -124,9 +124,23 @@ jobs:
         run: |
           find k8s/ -maxdepth 1 -name '*.yaml' -exec kubectl apply -f {} -n $APP_NAMESPACE \;
 
+      - name: Compute version tag
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" =~ ^refs/tags/v ]]; then
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=dev-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Roll backend image
         if: needs.build-backend.result == 'success'
         run: |
+          # Update the version label on both Deployment and pod template so APM picks it up
+          kubectl patch deployment/lahoucine-app -n $APP_NAMESPACE --type=json -p='[
+            {"op":"replace","path":"/metadata/labels/tags.datadoghq.com~1version","value":"${{ steps.ver.outputs.value }}"},
+            {"op":"replace","path":"/spec/template/metadata/labels/tags.datadoghq.com~1version","value":"${{ steps.ver.outputs.value }}"}
+          ]'
           kubectl set image deployment/lahoucine-app \
             lahoucine-app=$ECR_REGISTRY/$BACKEND_IMAGE:${{ github.sha }} -n $APP_NAMESPACE
           kubectl rollout status deployment/lahoucine-app -n $APP_NAMESPACE --timeout=120s
@@ -134,6 +148,10 @@ jobs:
       - name: Roll frontend image
         if: needs.build-frontend.result == 'success'
         run: |
+          kubectl patch deployment/lahoucine-app-frontend -n $APP_NAMESPACE --type=json -p='[
+            {"op":"replace","path":"/metadata/labels/tags.datadoghq.com~1version","value":"${{ steps.ver.outputs.value }}"},
+            {"op":"replace","path":"/spec/template/metadata/labels/tags.datadoghq.com~1version","value":"${{ steps.ver.outputs.value }}"}
+          ]'
           kubectl set image deployment/lahoucine-app-frontend \
             lahoucine-app-frontend=$ECR_REGISTRY/$FRONTEND_IMAGE:${{ github.sha }} -n $APP_NAMESPACE
           kubectl rollout status deployment/lahoucine-app-frontend -n $APP_NAMESPACE --timeout=120s

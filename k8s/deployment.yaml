@@ -4,6 +4,9 @@ metadata:
   name: lahoucine-app
   labels:
     app: lahoucine-app
+    tags.datadoghq.com/service: lahoucine-app
+    tags.datadoghq.com/env: prod
+    tags.datadoghq.com/version: "1.0.0"
 spec:
   replicas: 1
   selector:
@@ -13,6 +16,9 @@ spec:
     metadata:
       labels:
         app: lahoucine-app
+        tags.datadoghq.com/service: lahoucine-app
+        tags.datadoghq.com/env: prod
+        tags.datadoghq.com/version: "1.0.0"
     spec:
       serviceAccountName: lahoucine-app
       containers:
@@ -22,6 +28,18 @@ spec:
           ports:
             - containerPort: 8080
           env:
+            - name: DD_SERVICE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/service']
+            - name: DD_ENV
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/env']
+            - name: DD_VERSION
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['tags.datadoghq.com/version']
             - name: S3_BUCKET
               value: lahoucine-cluster-dog-photos-369042512949
             - name: AWS_REGION

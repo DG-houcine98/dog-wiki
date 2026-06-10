@@ -73,6 +73,10 @@ indexer:
     limits:
       cpu: "2"
       memory: "2Gi"
+  startupProbe:
+    failureThreshold: 60
+    periodSeconds: 5
+    timeoutSeconds: 2
 
 searcher:
   replicaCount: 1
@@ -83,3 +87,9 @@ searcher:
     limits:
       cpu: "2"
       memory: "2Gi"
+  # Default startup probe is failureThreshold=12 / periodSeconds=5 → 60s.
+  # On small instances the first boot is slower; give it 5 min.
+  startupProbe:
+    failureThreshold: 60
+    periodSeconds: 5
+    timeoutSeconds: 2

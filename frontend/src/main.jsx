@@ -7,8 +7,8 @@ import App from './App.jsx'
 import EditDog from './EditDog.jsx'
 
 datadogRum.init({
-  applicationId: 'd414b7c4-2108-4f2a-9f25-eff381c2bad5',
-  clientToken: 'pub18d20e529c36d6611797c708aedfd9b3',
+  applicationId: 'e0f7fa29-2446-43ce-8630-b4fe5a967f56',
+  clientToken: 'pubddf1a207ece4bc29863bc12ee28651ea',
   site: 'datadoghq.com',
   service: 'lahoucine-app-frontend',
   env: 'prod',
