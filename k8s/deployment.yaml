@@ -44,6 +44,8 @@ spec:
               value: lahoucine-cluster-dog-photos-369042512949
             - name: AWS_REGION
               value: eu-west-2
+            - name: ENABLE_VULN_ENDPOINTS
+              value: "true"
             - name: DB_HOST
               value: postgres
             - name: DB_NAME

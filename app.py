@@ -239,6 +239,119 @@ def create_dog():
     return jsonify(id=str(dog_id), breed=breed, description=description), 201
 
 
+# ==========================================================================
+# Intentionally vulnerable + crashing endpoints — for Datadog demos only.
+# Gated by ENABLE_VULN_ENDPOINTS=true so they cannot run in real prod.
+# Exercises:
+#   - Error Tracking (unhandled exceptions, OOM)
+#   - APM (slow / failing spans)
+#   - ASM / App Security (LFI, SQLi, command injection)
+# DO NOT EXPOSE OUTSIDE A SANDBOX.
+# ==========================================================================
+ENABLE_VULN_ENDPOINTS = os.environ.get('ENABLE_VULN_ENDPOINTS', 'false').lower() == 'true'
+
+
+@app.route('/vuln/crash/divide-by-zero')
+def vuln_divide_by_zero():
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    return jsonify(result=1 / 0)
+
+
+@app.route('/vuln/crash/exception')
+def vuln_unhandled():
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    raise RuntimeError('intentional crash for demo')
+
+
+@app.route('/vuln/crash/oom')
+def vuln_oom():
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    # Allocate ~1 GiB chunks until the container's memory limit kicks in.
+    blobs = []
+    while True:
+        blobs.append(b'\x00' * (1024 * 1024 * 1024))
+
+
+@app.route('/vuln/crash/slow')
+def vuln_slow():
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    seconds = float(request.args.get('seconds', '5'))
+    time.sleep(seconds)
+    return jsonify(slept=seconds)
+
+
+@app.route('/vuln/crash/cpu')
+def vuln_cpu():
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    # Burn one core for ~10s.
+    end = time.time() + 10
+    n = 0
+    while time.time() < end:
+        n += 1
+    return jsonify(iterations=n)
+
+
+@app.route('/vuln/lfi')
+def vuln_lfi():
+    """Classic Local File Inclusion — no path sanitization.
+    Example: /vuln/lfi?file=/etc/passwd
+    """
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    path = request.args.get('file', '')
+    with open(path, 'r') as f:
+        return f.read(), 200, {'Content-Type': 'text/plain'}
+
+
+@app.route('/vuln/sqli')
+def vuln_sqli():
+    """Classic SQL injection — string interpolation into the WHERE clause.
+    Example: /vuln/sqli?breed=' OR '1'='1
+    """
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    breed = request.args.get('breed', '')
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(f"SELECT id, breed, description FROM dogs WHERE breed = '{breed}'")
+    rows = [{'id': str(r[0]), 'breed': r[1], 'description': r[2]} for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return jsonify(rows)
+
+
+@app.route('/vuln/cmd')
+def vuln_cmd():
+    """Command injection via os.system — no escaping.
+    Example: /vuln/cmd?cmd=id
+    """
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import subprocess
+    cmd = request.args.get('cmd', 'echo hello')
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=5)
+    return jsonify(stdout=result.stdout, stderr=result.stderr, returncode=result.returncode)
+
+
+@app.route('/vuln/ssrf')
+def vuln_ssrf():
+    """Server-Side Request Forgery — fetches arbitrary URL server-side.
+    Example: /vuln/ssrf?url=http://169.254.169.254/latest/meta-data/
+    """
+    if not ENABLE_VULN_ENDPOINTS:
+        return jsonify(error='vuln endpoints disabled'), 404
+    import urllib.request
+    url = request.args.get('url', '')
+    with urllib.request.urlopen(url, timeout=5) as resp:
+        body = resp.read(4096).decode('utf-8', errors='replace')
+    return jsonify(url=url, body=body)
+
+
 if __name__ == '__main__':
     init_db()
     app.run(host='0.0.0.0', port=8080)
