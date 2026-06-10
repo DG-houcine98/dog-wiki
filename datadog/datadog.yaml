@@ -44,10 +44,9 @@ spec:
     # Adds the security-agent container to the DaemonSet and loads default rules.
     cws:
       enabled: true
+      syscallMonitorEnabled: true     # process / syscall rules
       network:
-        enabled: true       # network activity rules (reverse shells, suspicious egress)
-      syscallMonitor:
-        enabled: true       # process / syscall rules
+        enabled: true                  # network activity rules (reverse shells, suspicious egress)
     apm:
       enabled: true
       instrumentation:
