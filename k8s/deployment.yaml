@@ -46,6 +46,12 @@ spec:
               value: eu-west-2
             - name: ENABLE_VULN_ENDPOINTS
               value: "true"
+            - name: DD_APPSEC_ENABLED
+              value: "true"
+            - name: DD_IAST_ENABLED
+              value: "true"
+            - name: DD_APPSEC_RASP_ENABLED
+              value: "true"
             - name: DB_HOST
               value: postgres
             - name: DB_NAME
