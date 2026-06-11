@@ -5,6 +5,7 @@ import { datadogRum } from '@datadog/browser-rum'
 import './index.css'
 import App from './App.jsx'
 import EditDog from './EditDog.jsx'
+import Login from './Login.jsx'
 
 datadogRum.init({
   applicationId: 'e0f7fa29-2446-43ce-8630-b4fe5a967f56',
@@ -34,6 +35,7 @@ createRoot(document.getElementById('root')).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/edit/:id" element={<EditDog />} />
+        <Route path="/login" element={<Login />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

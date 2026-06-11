@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import './App.css'
 
 function App() {
@@ -76,9 +76,12 @@ function App() {
           </div>
           <p className="subtitle">Discover and share your favorite breeds</p>
         </div>
-        <span className={`badge ${health === 'ok' ? 'badge-ok' : 'badge-error'}`}>
-          {health === 'ok' ? 'API Connected' : 'API Offline'}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <Link to="/login" data-testid="header-login-link" style={{ textDecoration: 'none' }}>Sign in</Link>
+          <span className={`badge ${health === 'ok' ? 'badge-ok' : 'badge-error'}`}>
+            {health === 'ok' ? 'API Connected' : 'API Offline'}
+          </span>
+        </div>
       </header>
 
       <form className="add-form" onSubmit={handleSubmit}>
