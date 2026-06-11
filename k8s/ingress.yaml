@@ -9,7 +9,7 @@ metadata:
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS": 443}, {"HTTP": 80}]'
     alb.ingress.kubernetes.io/ssl-redirect: '443'
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:369042512949:certificate/cc515515-e3f3-4bc4-bec6-85290b50d779
-    alb.ingress.kubernetes.io/inbound-cidrs: 176.130.134.25/32, 91.197.137.154/32, 91.197.136.82/32
+    alb.ingress.kubernetes.io/inbound-cidrs: 176.130.134.25/32, 91.197.137.154/32, 91.197.136.82/32, 195.68.82.26/32
 spec:
   rules:
     - host: mcse-dogwiki.com
