@@ -1,3 +1,5 @@
+import ddtrace.auto  # noqa: F401 — must be first to ensure APM/IAST/AppSec patch Flask + boto3 + psycopg2
+
 import io
 import os
 import re
