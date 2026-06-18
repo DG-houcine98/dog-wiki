@@ -486,6 +486,7 @@ Resources:
               - iam:PutRolePolicy
               - iam:DeleteRolePolicy
               - iam:PassRole
+              - iam:UpdateAssumeRolePolicy
             Resource:
               - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-cp-*'
               - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-datadog-integration-role'
