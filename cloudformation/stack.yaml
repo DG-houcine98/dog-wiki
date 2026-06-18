@@ -468,6 +468,7 @@ Resources:
             Resource:
               - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
               - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/lahoucine-cloudprem-infra/*'
+              - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/lahoucine-datadog-integration/*'
 
           - Sid: IAMManageCloudPremResources
             Effect: Allow
@@ -487,6 +488,7 @@ Resources:
               - iam:PassRole
             Resource:
               - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-cp-*'
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-datadog-integration-role'
 
           - Sid: IAMManageCloudPremPolicy
             Effect: Allow
@@ -502,6 +504,7 @@ Resources:
               - iam:UntagPolicy
             Resource:
               - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/lahoucine-cp-*'
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/lahoucine-datadog-integration-policy'
 
           - Sid: RDSMetastore
             Effect: Allow
