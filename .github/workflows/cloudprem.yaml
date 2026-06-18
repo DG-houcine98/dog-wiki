@@ -18,6 +18,7 @@ env:
   EKS_CLUSTER: lahoucine-cluster
   PARENT_STACK: lahoucine-stack-1
   INFRA_STACK: lahoucine-cloudprem-infra
+  DD_INTEGRATION_STACK: lahoucine-datadog-integration
   CLOUDPREM_NS: ${{ inputs.cloudprem_namespace || 'cloudprem' }}
 
 jobs:
@@ -42,6 +43,26 @@ jobs:
           aws cloudformation describe-stacks \
             --stack-name "$PARENT_STACK" \
             --query 'Stacks[0].StackStatus' --output text
+
+      - name: Deploy Datadog integration role
+        run: |
+          aws cloudformation deploy \
+            --stack-name "$DD_INTEGRATION_STACK" \
+            --template-file datadog/cloudformation/datadog-integration.yaml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              DatadogExternalId=${{ secrets.DATADOG_EXTERNAL_ID }} \
+            --tags \
+              Creator=lahoucine.elhaouri \
+              Team='Sales Engineer' \
+              TTL=2026-09-05 \
+              Purpose='Internal training' \
+            --no-fail-on-empty-changeset
+          # Print the role ARN so it's easy to copy into Datadog → Integrations → AWS
+          aws cloudformation describe-stacks \
+            --stack-name "$DD_INTEGRATION_STACK" \
+            --query 'Stacks[0].Outputs[?OutputKey==`RoleArn`].OutputValue' \
+            --output text | xargs -I{} echo "Datadog integration role ARN: {}"
 
       - name: Deploy CloudPrem infra (RDS + S3 + IRSA)
         run: |

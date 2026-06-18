@@ -177,6 +177,7 @@ Resources:
                 sts:ExternalId: !Ref DatadogExternalId
       ManagedPolicyArns:
         - !Ref DatadogIntegrationPolicy
+        - arn:aws:iam::aws:policy/SecurityAudit   # required for Datadog resource collection
       Tags:
         - Key: Name
           Value: !Sub '${ResourcePrefix}-datadog-integration-role'
