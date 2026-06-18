@@ -7,8 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://k8s-default-lahoucin-dd80a98f00-1293314595.eu-west-2.elb.amazonaws.com',
+        // Local dev proxies /api/* through to the live cluster (your IP must be in the
+        // ingress allowlist at k8s/ingress.yaml). Use --insecure-https if the cert
+        // doesn't match.
+        target: 'https://mcse-dogwiki.com',
         changeOrigin: true,
+        secure: true,
       },
     },
   },
