@@ -1,0 +1,198 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  IAM role for the Datadog AWS integration. Datadog assumes this role from its
+  own AWS account using an external ID for cross-account access.
+  After deploying, copy the RoleArn output into Datadog → Integrations → AWS.
+
+Parameters:
+
+  DatadogExternalId:
+    Type: String
+    NoEcho: true
+    Description: >
+      External ID provided by Datadog when you create the AWS integration.
+      Find it at: Datadog UI → Integrations → Amazon Web Services → Add AWS Account → External ID.
+      Store this value as the DATADOG_EXTERNAL_ID secret in GitHub Actions.
+
+  ResourcePrefix:
+    Type: String
+    Default: lahoucine
+    Description: Prefix applied to the IAM role and policy names.
+
+  DatadogAWSAccountId:
+    Type: String
+    Default: '464622532012'
+    Description: >
+      Datadog's AWS account ID that will assume this role.
+      Default is correct for US1 (datadoghq.com).
+      EU (datadoghq.eu): 464622532012 (same).
+      Do not change unless Datadog support instructs you to.
+
+Resources:
+
+  DatadogIntegrationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub '${ResourcePrefix}-datadog-integration-policy'
+      Description: Read-only permissions required by the Datadog AWS integration
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Resource: '*'
+            Action:
+              - account:GetAccountInformation
+              - airflow:GetEnvironment
+              - airflow:ListEnvironments
+              - apigateway:GET
+              - appsync:ListGraphqlApis
+              - autoscaling:Describe*
+              - backup:List*
+              - batch:DescribeJobDefinitions
+              - batch:DescribeJobQueues
+              - batch:DescribeJobs
+              - batch:ListJobs
+              - bcm-data-exports:GetExport
+              - bcm-data-exports:ListExports
+              - budgets:ViewBudget
+              - cloudfront:GetDistributionConfig
+              - cloudfront:ListDistributions
+              - cloudtrail:DescribeTrails
+              - cloudtrail:GetTrail
+              - cloudtrail:GetTrailStatus
+              - cloudtrail:ListTrails
+              - cloudtrail:LookupEvents
+              - cloudwatch:Describe*
+              - cloudwatch:Get*
+              - cloudwatch:List*
+              - codebuild:BatchGetProjects
+              - codebuild:ListProjects
+              - codedeploy:BatchGet*
+              - codedeploy:List*
+              - cost-optimization-hub:GetRecommendation
+              - cost-optimization-hub:ListRecommendations
+              - cur:DescribeReportDefinitions
+              - directconnect:Describe*
+              - dms:DescribeReplicationInstances
+              - dynamodb:Describe*
+              - dynamodb:List*
+              - ec2:Describe*
+              - ecs:Describe*
+              - ecs:List*
+              - eks:DescribeCluster
+              - eks:ListClusters
+              - elasticache:Describe*
+              - elasticache:List*
+              - elasticfilesystem:DescribeAccessPoints
+              - elasticfilesystem:DescribeFileSystems
+              - elasticfilesystem:DescribeTags
+              - elasticloadbalancing:Describe*
+              - elasticmapreduce:Describe*
+              - elasticmapreduce:List*
+              - es:DescribeElasticsearchDomains
+              - es:ListDomainNames
+              - es:ListTags
+              - events:CreateEventBus
+              - fsx:DescribeFileSystems
+              - fsx:ListTagsForResource
+              - glue:BatchGetJobs
+              - glue:GetJob
+              - glue:GetJobs
+              - glue:ListJobs
+              - health:DescribeAffectedEntities
+              - health:DescribeEventDetails
+              - health:DescribeEvents
+              - iam:ListAccountAliases
+              - iot:GetV2LoggingOptions
+              - kinesis:Describe*
+              - kinesis:List*
+              - lambda:List*
+              - logs:DeleteSubscriptionFilter
+              - logs:DescribeDeliveries
+              - logs:DescribeDeliverySources
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+              - logs:DescribeSubscriptionFilters
+              - logs:FilterLogEvents
+              - logs:GetDeliveryDestination
+              - logs:PutSubscriptionFilter
+              - logs:TestMetricFilter
+              - network-firewall:DescribeLoggingConfiguration
+              - network-firewall:ListFirewalls
+              - oam:ListAttachedLinks
+              - oam:ListSinks
+              - organizations:Describe*
+              - organizations:List*
+              - rds:Describe*
+              - rds:List*
+              - redshift-serverless:ListNamespaces
+              - redshift:DescribeClusters
+              - redshift:DescribeLoggingStatus
+              - route53:List*
+              - route53resolver:ListResolverQueryLogConfigs
+              - s3:GetBucketLocation
+              - s3:GetBucketLogging
+              - s3:GetBucketNotification
+              - s3:GetBucketTagging
+              - s3:GetObject
+              - s3:ListAllMyBuckets
+              - s3:ListBucket
+              - s3:PutBucketNotification
+              - ses:Get*
+              - ses:List*
+              - sns:GetSubscriptionAttributes
+              - sns:List*
+              - sns:Publish
+              - sqs:ListQueues
+              - ssm:GetServiceSetting
+              - ssm:ListCommands
+              - states:DescribeStateMachine
+              - states:ListStateMachines
+              - support:DescribeTrustedAdvisor*
+              - support:RefreshTrustedAdvisorCheck
+              - tag:GetResources
+              - tag:GetTagKeys
+              - tag:GetTagValues
+              - timestream:DescribeEndpoints
+              - trustedadvisor:ListRecommendationResources
+              - trustedadvisor:ListRecommendations
+              - wafv2:ListLoggingConfigurations
+              - xray:BatchGetTraces
+              - xray:GetTraceSummaries
+
+  DatadogIntegrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ResourcePrefix}-datadog-integration-role'
+      Description: Cross-account role assumed by Datadog for AWS integration
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DatadogAWSAccountId}:root'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref DatadogExternalId
+      ManagedPolicyArns:
+        - !Ref DatadogIntegrationPolicy
+      Tags:
+        - Key: Name
+          Value: !Sub '${ResourcePrefix}-datadog-integration-role'
+        - Key: ManagedBy
+          Value: cloudformation
+
+Outputs:
+
+  RoleArn:
+    Description: >
+      Paste this ARN into Datadog → Integrations → Amazon Web Services → Role ARN.
+    Value: !GetAtt DatadogIntegrationRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-DatadogIntegrationRoleArn'
+
+  RoleName:
+    Value: !Ref DatadogIntegrationRole
+    Export:
+      Name: !Sub '${AWS::StackName}-DatadogIntegrationRoleName'
