@@ -54,7 +54,7 @@ jobs:
               DatadogExternalId=${{ secrets.DATADOG_EXTERNAL_ID }} \
             --tags \
               Creator=lahoucine.elhaouri \
-              Team='Sales Engineer' \
+              Team=pre-sales-engineering \
               TTL=2026-09-05 \
               Purpose='Internal training' \
             --no-fail-on-empty-changeset
@@ -76,7 +76,7 @@ jobs:
               DBPassword=${{ secrets.CLOUDPREM_DB_PASSWORD }} \
             --tags \
               Creator=lahoucine.elhaouri \
-              Team='Sales Engineer' \
+              Team=pre-sales-engineering \
               TTL=2026-09-05 \
               Purpose='Internal training' \
             --no-fail-on-empty-changeset
