@@ -489,7 +489,7 @@ Resources:
               - iam:UpdateAssumeRolePolicy
             Resource:
               - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-cp-*'
-              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/lahoucine-datadog-integration-role'
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/AWSIntsTeam_DatadogIntegrationRole_*'
 
           - Sid: IAMManageCloudPremPolicy
             Effect: Allow
@@ -506,6 +506,7 @@ Resources:
             Resource:
               - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/lahoucine-cp-*'
               - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/lahoucine-datadog-integration-policy'
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:policy/AWSIntsTeam_DatadogIntegrationRole_*'
 
           - Sid: RDSMetastore
             Effect: Allow

@@ -163,7 +163,7 @@ Resources:
   DatadogIntegrationRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${ResourcePrefix}-datadog-integration-role'
+      RoleName: !Sub 'AWSIntsTeam_DatadogIntegrationRole_${ResourcePrefix}'
       Description: Cross-account role assumed by Datadog for AWS integration
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
