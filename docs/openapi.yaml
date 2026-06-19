@@ -1,0 +1,721 @@
+openapi: 3.0.3
+info:
+  title: Dog Breeds API
+  description: >
+    Flask backend for the Dog Breeds / GoalZone demo environment.
+    Instrumented with Datadog APM, AAP, IAST, and RASP.
+  version: 1.0.0
+  contact:
+    name: lahoucine.elhaouri
+
+servers:
+  - url: https://mcse-dogwiki.com/api
+    description: Production (EKS eu-west-2)
+
+tags:
+  - name: dogs
+    description: Dog breed CRUD
+  - name: photos
+    description: Breed photo retrieval
+  - name: auth
+    description: Session authentication (intentionally weak — demo only)
+  - name: vuln
+    description: >
+      Intentionally vulnerable endpoints for Datadog security demos.
+      Only active when ENABLE_VULN_ENDPOINTS=true.
+
+paths:
+
+  /:
+    get:
+      summary: API root
+      operationId: index
+      responses:
+        '200':
+          description: Welcome message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Welcome to the Dog Breeds API!
+
+  /health:
+    get:
+      summary: Health check
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /dogs:
+    get:
+      summary: List all dog breeds
+      operationId: listDogs
+      tags: [dogs]
+      responses:
+        '200':
+          description: Array of dog breeds ordered by creation date descending
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Dog'
+
+    post:
+      summary: Create a new dog breed
+      operationId: createDog
+      tags: [dogs]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [breed]
+              properties:
+                breed:
+                  type: string
+                  example: Golden Retriever
+                description:
+                  type: string
+                  example: Friendly, intelligent, devoted family dog.
+                photo:
+                  type: string
+                  format: binary
+                  description: Optional breed photo (converted to WebP on upload)
+      responses:
+        '201':
+          description: Breed created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DogCreated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /dogs/{dog_id}:
+    parameters:
+      - $ref: '#/components/parameters/DogId'
+
+    get:
+      summary: Get a single dog breed
+      operationId: getDog
+      tags: [dogs]
+      responses:
+        '200':
+          description: Dog breed object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dog'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update a dog breed
+      operationId: updateDog
+      tags: [dogs]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [breed]
+              properties:
+                breed:
+                  type: string
+                description:
+                  type: string
+                photo:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Updated breed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DogUpdated'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete a dog breed
+      operationId: deleteDog
+      tags: [dogs]
+      responses:
+        '200':
+          description: Breed deleted (S3 photo also removed if present)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /photos/{dog_id}:
+    get:
+      summary: Get breed photo
+      operationId: getPhoto
+      tags: [photos]
+      parameters:
+        - $ref: '#/components/parameters/DogId'
+      responses:
+        '200':
+          description: WebP image from S3
+          content:
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /auth/login:
+    post:
+      summary: Log in and obtain a session token
+      operationId: login
+      tags: [auth]
+      description: >
+        Emits Datadog ASM `track_user_login_success_event` /
+        `track_user_login_failure_event` on every attempt.
+        Intentionally has no rate-limiting — used to trigger brute-force
+        and credential-stuffing signals.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: admin
+              password: admin123
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      summary: Get the current authenticated user
+      operationId: getMe
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authenticated user info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: string
+                    example: admin
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      summary: Invalidate the current session token
+      operationId: logout
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    example: true
+
+  /vuln/crash/divide-by-zero:
+    get:
+      summary: Trigger a ZeroDivisionError (Error Tracking demo)
+      operationId: vulnDivideByZero
+      tags: [vuln]
+      responses:
+        '500':
+          description: Unhandled ZeroDivisionError — captured by Datadog Error Tracking
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/crash/exception:
+    get:
+      summary: Trigger an unhandled RuntimeError (Error Tracking demo)
+      operationId: vulnException
+      tags: [vuln]
+      responses:
+        '500':
+          description: Unhandled RuntimeError
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/crash/slow:
+    get:
+      summary: Slow request — blocks for N seconds (APM latency demo)
+      operationId: vulnSlow
+      tags: [vuln]
+      parameters:
+        - name: seconds
+          in: query
+          schema:
+            type: number
+            default: 5
+      responses:
+        '200':
+          description: Response after sleep
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slept:
+                    type: number
+                    example: 5.0
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/crash/cpu:
+    get:
+      summary: CPU burn for ~10s (Continuous Profiler demo)
+      operationId: vulnCpu
+      tags: [vuln]
+      responses:
+        '200':
+          description: Iterations completed during the burn
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  iterations:
+                    type: integer
+                    example: 16349854
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/lfi:
+    get:
+      summary: Local File Inclusion — reads arbitrary file from disk (AAP demo)
+      operationId: vulnLfi
+      tags: [vuln]
+      parameters:
+        - name: file
+          in: query
+          required: true
+          schema:
+            type: string
+          example: /etc/passwd
+      responses:
+        '200':
+          description: Raw file contents
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/sqli:
+    get:
+      summary: SQL Injection — unsanitized breed parameter (AAP + IAST demo)
+      operationId: vulnSqli
+      tags: [vuln]
+      parameters:
+        - name: breed
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "' OR '1'='1"
+      responses:
+        '200':
+          description: Query results (potentially all rows)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    breed:
+                      type: string
+                    description:
+                      type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cmd:
+    get:
+      summary: Command injection — runs arbitrary shell command (AAP + CWS demo)
+      operationId: vulnCmd
+      tags: [vuln]
+      parameters:
+        - name: cmd
+          in: query
+          required: true
+          schema:
+            type: string
+          example: id
+      responses:
+        '200':
+          description: Shell command output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout:
+                    type: string
+                  stderr:
+                    type: string
+                  returncode:
+                    type: integer
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/ssrf:
+    get:
+      summary: SSRF — server fetches arbitrary URL (AAP demo)
+      operationId: vulnSsrf
+      tags: [vuln]
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+          example: http://169.254.169.254/latest/meta-data/
+      responses:
+        '200':
+          description: Response body from the server-side request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                  body:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/passwd-write:
+    get:
+      summary: Write to /etc/passwd (CWS sensitive file modification demo)
+      operationId: vulnCwsPasswdWrite
+      tags: [vuln]
+      responses:
+        '200':
+          description: Backdoor entry appended to /etc/passwd
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  action:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/spawn-shell:
+    get:
+      summary: Spawn an interactive shell inside the container (CWS demo)
+      operationId: vulnCwsSpawnShell
+      tags: [vuln]
+      responses:
+        '200':
+          description: Shell output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/discovery:
+    get:
+      summary: Container recon — chains whoami/id/hostname/netstat (CWS demo)
+      operationId: vulnCwsDiscovery
+      tags: [vuln]
+      responses:
+        '200':
+          description: Recon output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout:
+                    type: string
+                  stderr:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/crypto-miner:
+    get:
+      summary: Spawn a process named xmrig (CWS crypto-miner pattern demo)
+      operationId: vulnCwsCryptoMiner
+      tags: [vuln]
+      responses:
+        '200':
+          description: Miner process info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pid:
+                    type: integer
+                  name:
+                    type: string
+                    example: xmrig
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/reverse-shell:
+    get:
+      summary: Attempt a bash reverse shell (CWS network + shell demo)
+      operationId: vulnCwsReverseShell
+      tags: [vuln]
+      parameters:
+        - name: host
+          in: query
+          schema:
+            type: string
+            default: 10.0.0.99
+        - name: port
+          in: query
+          schema:
+            type: string
+            default: '4444'
+      responses:
+        '200':
+          description: Attempt logged (connection will fail without a listener)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attempted:
+                    type: boolean
+                  host:
+                    type: string
+                  port:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/ld-preload:
+    get:
+      summary: LD_PRELOAD with user-writable path (CWS rootkit demo)
+      operationId: vulnCwsLdPreload
+      tags: [vuln]
+      responses:
+        '200':
+          description: Command output
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout:
+                    type: string
+                  stderr:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+  /vuln/cws/kernel-module:
+    get:
+      summary: Attempt kernel module load (CWS persistence demo)
+      operationId: vulnCwsKernelModule
+      tags: [vuln]
+      responses:
+        '200':
+          description: Command output (insmod/modprobe will fail without CAP_SYS_MODULE)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stdout:
+                    type: string
+                  stderr:
+                    type: string
+        '404':
+          $ref: '#/components/responses/VulnDisabled'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token returned by POST /auth/login
+
+  parameters:
+    DogId:
+      name: dog_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: UUID of the dog breed record
+
+  schemas:
+
+    Dog:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        breed:
+          type: string
+          example: Golden Retriever
+        description:
+          type: string
+          example: Friendly, intelligent, devoted family dog.
+        photo_url:
+          type: string
+          nullable: true
+          example: /photos/7f3a1b2c-...
+        created_at:
+          type: string
+          format: date-time
+
+    DogCreated:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        breed:
+          type: string
+        description:
+          type: string
+
+    DogUpdated:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        breed:
+          type: string
+        description:
+          type: string
+
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          example: admin
+        password:
+          type: string
+          example: admin123
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Bearer token for subsequent requests
+        user:
+          type: string
+          example: admin
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+  responses:
+
+    BadRequest:
+      description: Missing or invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Missing or invalid Bearer token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    VulnDisabled:
+      description: Vulnerable endpoints are disabled (ENABLE_VULN_ENDPOINTS != true)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: vuln endpoints disabled
