@@ -29,6 +29,8 @@ datadogRum.init({
   traceSampleRate: 100,
 })
 
+datadogRum.setGlobalContextProperty('team', 'pre-sales-engineering')
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>

@@ -7,6 +7,9 @@ spec:
   global:
     clusterName: "lahoucine-cluster"
     site: "datadoghq.com"
+    tags:
+      - "team:pre-sales-engineering"
+      - "creator:lahoucine.elhaouri"
     credentials:
       apiSecret:
         secretName: "datadog-secret"

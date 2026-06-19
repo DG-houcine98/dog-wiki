@@ -7,6 +7,7 @@ metadata:
     tags.datadoghq.com/service: lahoucine-app
     tags.datadoghq.com/env: prod
     tags.datadoghq.com/version: "1.0.0"
+    tags.datadoghq.com/team: pre-sales-engineering
 spec:
   replicas: 1
   selector:
@@ -19,6 +20,7 @@ spec:
         tags.datadoghq.com/service: lahoucine-app
         tags.datadoghq.com/env: prod
         tags.datadoghq.com/version: "1.0.0"
+        tags.datadoghq.com/team: pre-sales-engineering
     spec:
       serviceAccountName: lahoucine-app
       containers:
@@ -52,6 +54,8 @@ spec:
               value: "true"
             - name: DD_APPSEC_RASP_ENABLED
               value: "true"
+            - name: DD_TAGS
+              value: "team:pre-sales-engineering"
             - name: DB_HOST
               value: postgres
             - name: DB_NAME
