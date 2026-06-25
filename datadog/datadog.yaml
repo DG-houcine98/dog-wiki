@@ -19,11 +19,23 @@ spec:
     # OPTION 1 (active): Logs → Observability Pipelines Worker → CloudPrem
     #   Agent sends logs to OPW, which then forwards them to CloudPrem.
     #   Use this when you want OPW to handle transformation/routing.
+    kubelet:
+      tlsVerify: false
     env:
       - name: DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_ENABLED
         value: "true"
       - name: DD_OBSERVABILITY_PIPELINES_WORKER_LOGS_URL
         value: "http://opw-observability-pipelines-worker.datadog.svc.cluster.local:8282"
+      - name: DD_REMOTE_CONFIGURATION_REFRESH_INTERVAL
+        value: "5s"
+      - name: DD_SBOM_CONTAINER_IMAGE_ALLOW_MISSING_REPODIGEST
+        value: "true"
+      - name: DD_RUNTIME_SECURITY_CONFIG_HASH_RESOLVER_REPLACE
+        value: >-
+          {
+            "/app/malware.x64": "sha256:f3f7eb972a998047edb4c6e4287308236fcd8a9ef81dc13e6469590275af3cac",
+            "/app/malware.arm64": "sha256:80bab7f4bc97e36724433f9ab2dffea7fc0bf0d0fd31a7b6a4012a4f0821737e"
+          }
     #
     # OPTION 2: Logs → CloudPrem directly (bypass OPW)
     #   Agent sends logs straight to the CloudPrem indexer.
@@ -65,4 +77,39 @@ spec:
             ddTraceConfigs:
               - name: "DD_DYNAMIC_INSTRUMENTATION_ENABLED"
                 value: "true"
-              
+          - name: "security-playground-target"
+            namespaceSelector:
+              matchNames:
+                - playground
+            podSelector:
+              matchLabels:
+                app: playground-app
+            ddTraceVersions:
+              java: "1"
+              python: "4"
+              js: "5"
+              php: "1"
+              dotnet: "3"
+              ruby: "2"
+            ddTraceConfigs:
+              - name: "DD_APPSEC_ENABLED"
+                value: "true"
+              - name: "DD_APPSEC_RASP_ENABLED"
+                value: "true"
+              - name: "DD_IAST_ENABLED"
+                value: "true"
+              - name: "DD_APPSEC_SCA_ENABLED"
+                value: "true"
+              - name: "DD_ENV"
+                value: "playground-env"
+    admissionController:
+      enabled: true
+      mutateUnlabelled: true
+      cwsInstrumentation:
+        enabled: true
+        mode: remote_copy
+    sbom:
+      enabled: true
+      containerImage:
+        enabled: true
+        uncompressedLayersSupport: true
