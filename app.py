@@ -462,7 +462,7 @@ def _appsec_track_login(success, user_id, exists=True):
             from ddtrace import tracer
             track_user_login_failure_event(tracer, user_id=user_id, exists=exists, login=user_id)
     except Exception:
-        pass
+        app.logger.exception('Failed to report login event to Datadog ASM')
 
 
 @app.route('/auth/login', methods=['POST'])
