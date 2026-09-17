@@ -50,6 +50,7 @@ spec:
   features:
     clusterChecks:
       enabled: true
+      useClusterChecksRunners: true
     orchestratorExplorer:
       enabled: true
     logCollection:
@@ -113,3 +114,33 @@ spec:
       containerImage:
         enabled: true
         uncompressedLayersSupport: true
+  override:
+    clusterChecksRunner:
+      # Executes cluster checks (incl. the postgres DBM check below) on a
+      # dedicated runner instead of dispatching them onto DaemonSet agent pods.
+      # Password comes from the datadog-postgres-credentials secret, not committed here.
+      replicas: 1
+      envFrom:
+        - secretRef:
+            name: datadog-postgres-credentials
+    clusterAgent:
+      # DBM check for the CloudPrem RDS Postgres metastore.
+      # cluster_check: true makes the Cluster Agent schedule this onto a
+      # Cluster Checks Runner pod instead of every DaemonSet agent running it.
+      # The Cluster Agent resolves %%env_%% templates itself before dispatch,
+      # so it needs this secret too, not just the clusterChecksRunner.
+      envFrom:
+        - secretRef:
+            name: datadog-postgres-credentials
+      extraConfd:
+        configDataMap:
+          postgres.yaml: |-
+            cluster_check: true
+            init_config:
+            instances:
+              - dbm: true
+                host: lahoucine-cp-postgres.cv8wqioqqhmr.eu-west-2.rds.amazonaws.com
+                port: 5432
+                username: datadog
+                password: "%%env_DD_POSTGRES_PASSWORD%%"
+                dbname: cloudprem
