@@ -1,0 +1,30 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-tests:
+    name: Backend tests (pytest + Datadog Test Optimization)
+    runs-on: ubuntu-latest
+    env:
+      DD_CIVISIBILITY_AGENTLESS_ENABLED: "true"
+      DD_API_KEY: ${{ secrets.DD_API_KEY }}
+      DD_SITE: datadoghq.com
+      DD_ENV: ci
+      DD_SERVICE: lahoucine-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-test.txt
+
+      - name: Run tests with Datadog Test Optimization
+        run: pytest --ddtrace tests/
