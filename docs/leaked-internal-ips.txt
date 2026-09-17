@@ -1,0 +1,9 @@
+Internal infra inventory (demo file — for Datadog Secret Scanning trigger only)
+DO NOT put real internal IPs in a committed file.
+
+bastion-host      10.42.13.7
+db-primary        10.42.13.21
+db-replica        10.42.13.22
+redis-cache       10.42.14.5
+internal-api-lb   192.168.88.10
+vpn-gateway       172.16.5.1
