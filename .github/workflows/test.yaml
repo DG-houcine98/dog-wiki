@@ -27,4 +27,4 @@ jobs:
         run: pip install -r requirements.txt -r requirements-test.txt
 
       - name: Run tests with Datadog Test Optimization
-        run: pytest --ddtrace tests/
+        run: pytest --ddtrace --cov=. --cov-report=term tests/
