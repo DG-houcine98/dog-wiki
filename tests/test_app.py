@@ -2,8 +2,10 @@ import io
 import uuid
 from datetime import datetime
 
+import pytest
 from PIL import Image
 
+import app as app_module
 from app import _breed_to_key, _to_webp_bytes
 
 
@@ -32,6 +34,45 @@ def test_to_webp_bytes_converts_image():
     buf = _to_webp_bytes(FakeUpload())
     img = Image.open(buf)
     assert img.format == 'WEBP'
+
+
+def test_to_webp_bytes_converts_rgba_image():
+    img = Image.new('RGBA', (4, 4), color=(255, 0, 0, 128))
+    raw = io.BytesIO()
+    img.save(raw, format='PNG')
+    raw.seek(0)
+
+    class Upload:
+        stream = raw
+
+    buf = _to_webp_bytes(Upload())
+    assert Image.open(buf).format == 'WEBP'
+
+
+def test_get_db_uses_env_config(mocker):
+    mock_connect = mocker.patch.object(app_module.psycopg2, 'connect')
+    app_module.get_db()
+    mock_connect.assert_called_once_with(
+        host=app_module.DB_HOST,
+        dbname=app_module.DB_NAME,
+        user=app_module.DB_USER,
+        password=app_module.DB_PASSWORD,
+    )
+
+
+def test_init_db_succeeds_immediately(mocker):
+    conn = mocker.MagicMock()
+    mocker.patch.object(app_module, 'get_db', return_value=conn)
+    app_module.init_db()
+    conn.cursor.return_value.execute.assert_called_once()
+    conn.commit.assert_called_once()
+
+
+def test_init_db_gives_up_after_retries(mocker):
+    mocker.patch.object(app_module, 'get_db', side_effect=app_module.psycopg2.OperationalError)
+    mocker.patch.object(app_module.time, 'sleep')
+    with pytest.raises(RuntimeError):
+        app_module.init_db()
 
 
 def test_index(client):
@@ -99,6 +140,35 @@ def test_create_dog_with_photo_uploads_to_s3(client, mock_db, mock_s3):
     mock_s3.upload_fileobj.assert_called_once()
 
 
+def test_get_photo_not_found(client, mock_db):
+    mock_db.fetchone.return_value = None
+    resp = client.get(f'/photos/{uuid.uuid4()}')
+    assert resp.status_code == 404
+
+
+def test_get_photo_found(client, mock_db, mock_s3, mocker):
+    mock_db.fetchone.return_value = ('dogs/Beagle.webp',)
+    mock_s3.get_object.return_value = {
+        'Body': mocker.Mock(read=mocker.Mock(return_value=b'imgdata')),
+        'ContentType': 'image/webp',
+    }
+    resp = client.get(f'/photos/{uuid.uuid4()}')
+    assert resp.status_code == 200
+    assert resp.data == b'imgdata'
+
+
+def test_update_dog_replaces_photo(client, mock_db, mock_s3):
+    dog_id = uuid.uuid4()
+    mock_db.fetchone.return_value = (dog_id, 'dogs/OldPhoto.webp')
+    data = {
+        'breed': 'Corgi',
+        'photo': (_png_bytes(), 'new.png'),
+    }
+    resp = client.put(f'/dogs/{dog_id}', data=data, content_type='multipart/form-data')
+    assert resp.status_code == 200
+    mock_s3.upload_fileobj.assert_called_once()
+
+
 def test_update_dog_not_found(client, mock_db):
     mock_db.fetchone.return_value = None
     resp = client.put(f'/dogs/{uuid.uuid4()}', data={'breed': 'Husky'})
@@ -144,6 +214,69 @@ def test_vuln_endpoints_disabled_by_default(client):
         '/vuln/crash/divide-by-zero',
         '/vuln/crash/exception',
         '/vuln/crash/oom',
+        '/vuln/crash/slow',
+        '/vuln/crash/cpu',
+        '/vuln/lfi',
+        '/vuln/sqli',
+        '/vuln/cmd',
+        '/vuln/cws/passwd-write',
+        '/vuln/cws/spawn-shell',
+        '/vuln/cws/discovery',
+        '/vuln/cws/crypto-miner',
+        '/vuln/cws/reverse-shell',
+        '/vuln/cws/ld-preload',
+        '/vuln/cws/kernel-module',
+        '/vuln/ssrf',
     ):
         resp = client.get(path)
         assert resp.status_code == 404
+
+
+def test_login_requires_username_and_password(client):
+    resp = client.post('/auth/login', json={'username': 'demo'})
+    assert resp.status_code == 400
+
+
+def test_login_invalid_credentials(client):
+    resp = client.post('/auth/login', json={'username': 'demo', 'password': 'wrong'})
+    assert resp.status_code == 401
+
+
+def test_login_unknown_user(client):
+    resp = client.post('/auth/login', json={'username': 'nobody', 'password': 'x'})
+    assert resp.status_code == 401
+
+
+def test_login_success_and_me(client):
+    resp = client.post('/auth/login', json={'username': 'demo', 'password': 'demo'})
+    assert resp.status_code == 200
+    token = resp.get_json()['token']
+
+    me = client.get('/auth/me', headers={'Authorization': f'Bearer {token}'})
+    assert me.status_code == 200
+    assert me.get_json()['user'] == 'demo'
+
+
+def test_me_requires_valid_token(client):
+    resp = client.get('/auth/me', headers={'Authorization': 'Bearer not-a-real-token'})
+    assert resp.status_code == 401
+
+    resp = client.get('/auth/me')
+    assert resp.status_code == 401
+
+
+def test_logout_invalidates_token(client):
+    login = client.post('/auth/login', json={'username': 'admin', 'password': 'admin123'})
+    token = login.get_json()['token']
+
+    logout = client.post('/auth/logout', headers={'Authorization': f'Bearer {token}'})
+    assert logout.status_code == 200
+    assert logout.get_json() == {'ok': True}
+
+    me = client.get('/auth/me', headers={'Authorization': f'Bearer {token}'})
+    assert me.status_code == 401
+
+
+def test_logout_unknown_token_is_a_noop(client):
+    resp = client.post('/auth/logout', headers={'Authorization': 'Bearer unknown'})
+    assert resp.status_code == 200
